@@ -1,19 +1,19 @@
 """
-FBrefScraper - Classe pour scraper les données de scouting FBref
-Gère le téléchargement et l'extraction des données d'un seul joueur
+FBrefScraper - Version améliorée avec extraction de métadonnées + MINUTES JOUÉES
+Extrait les données de scouting + infos du joueur (nom, âge, taille, minutes, etc.)
 """
 
 import time
 import pandas as pd
+import re
 from datetime import datetime
 from bs4 import BeautifulSoup, Comment
-from typing import Optional, Dict, List
+from typing import Optional, Dict, Tuple
 
 
 class FBrefScraper:
     """
-    Scraper pour extraire les données de scouting depuis FBref
-    Utilise Selenium pour contourner les protections Cloudflare
+    Scraper pour extraire les données de scouting + métadonnées depuis FBref
     """
     
     def __init__(self, wait_time: int = 10, headless: bool = True):
@@ -82,15 +82,7 @@ class FBrefScraper:
             raise
     
     def _download_page(self, url: str) -> Optional[str]:
-        """
-        Télécharge une page avec Selenium
-        
-        Args:
-            url: URL de la page à télécharger
-            
-        Returns:
-            HTML de la page ou None si erreur
-        """
+        """Télécharge une page avec Selenium"""
         try:
             self._log(f"Téléchargement : {url}")
             self.driver.get(url)
@@ -115,18 +107,8 @@ class FBrefScraper:
             self._log(f"Erreur téléchargement : {e}", "ERROR")
             return None
     
-    def _extract_tables_from_comments(self, soup: BeautifulSoup, table_id: str) -> List:
-        """
-        Extrait les tables cachées dans les commentaires HTML
-        FBref cache souvent les tables dans <!-- ... -->
-        
-        Args:
-            soup: Objet BeautifulSoup
-            table_id: ID de la table à extraire
-            
-        Returns:
-            Liste des tables trouvées
-        """
+    def _extract_tables_from_comments(self, soup: BeautifulSoup, table_id: str) -> list:
+        """Extrait les tables cachées dans les commentaires HTML"""
         tables = []
         comments = soup.find_all(string=lambda text: isinstance(text, Comment))
         
@@ -144,19 +126,10 @@ class FBrefScraper:
         return tables
     
     def _extract_table(self, html_content: str, table_id: str) -> Optional[BeautifulSoup]:
-        """
-        Extrait une table (visible ou cachée) depuis le HTML
-        
-        Args:
-            html_content: Contenu HTML de la page
-            table_id: ID de la table à extraire
-            
-        Returns:
-            Objet BeautifulSoup de la table ou None
-        """
+        """Extrait une table depuis le HTML"""
         self._log(f"Recherche de la table '{table_id}'...")
         
-        soup = BeautifulSoup(html_content, 'lxml')
+        soup = BeautifulSoup(html_content, 'html.parser')
         
         # Tables visibles
         visible_tables = soup.find_all('table', {'id': table_id})
@@ -176,19 +149,10 @@ class FBrefScraper:
         return all_tables[0]
     
     def _parse_table_to_dataframe(self, table: BeautifulSoup) -> Optional[pd.DataFrame]:
-        """
-        Convertit une table HTML en DataFrame pandas
-        
-        Args:
-            table: Objet BeautifulSoup de la table
-            
-        Returns:
-            DataFrame ou None si erreur
-        """
+        """Convertit une table HTML en DataFrame"""
         try:
             self._log("Parsing de la table en DataFrame...")
             
-            # Utiliser pandas pour parser
             df_list = pd.read_html(str(table))
             
             if not df_list:
@@ -204,17 +168,187 @@ class FBrefScraper:
             self._log(f"Erreur parsing : {e}", "ERROR")
             return None
     
-    def scrape_player(self, url: str, table_id: str, player_name: str = None) -> Optional[pd.DataFrame]:
+    def _extract_minutes_played(self, html_content: str) -> Optional[int]:
         """
-        Scrape les données d'un joueur
+        Extrait le nombre de minutes jouées depuis le scouting report
+        Pattern : "Based on <strong>623 minutes</strong> played"
+        """
+        self._log("Extraction des minutes jouées...")
+        
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        try:
+            # Chercher le pattern "Based on X minutes"
+            # Pattern exact trouvé : Based on <strong>623 minutes</strong> played
+            
+            # Méthode 1: Rechercher dans les divs avec style
+            divs = soup.find_all('div', style=re.compile('max-width'))
+            for div in divs:
+                text = div.get_text()
+                if 'Based on' in text and 'minutes' in text:
+                    self._log(f"Texte trouvé : {text[:100]}...", "DEBUG")
+                    # Pattern : "Based on 623 minutes" ou "Based on <strong>623 minutes</strong>"
+                    match = re.search(r'Based on\s+(?:<strong>)?(\d+)\s+minutes?(?:</strong>)?', str(div))
+                    if match:
+                        minutes = int(match.group(1))
+                        self._log(f"Minutes jouées trouvées : {minutes} min ✓", "SUCCESS")
+                        return minutes
+            
+            # Méthode 2: Chercher directement dans le HTML brut
+            match = re.search(r'Based on\s+<strong>(\d+)\s+minutes</strong>\s+played', html_content)
+            if match:
+                minutes = int(match.group(1))
+                self._log(f"Minutes jouées trouvées (HTML brut) : {minutes} min ✓", "SUCCESS")
+                return minutes
+            
+            # Méthode 3: Pattern plus général
+            match = re.search(r'Based on\s+(?:<[^>]+>)?(\d+)(?:</[^>]+>)?\s+minutes', html_content, re.IGNORECASE)
+            if match:
+                minutes = int(match.group(1))
+                self._log(f"Minutes jouées trouvées (pattern général) : {minutes} min ✓", "SUCCESS")
+                return minutes
+            
+            # Méthode 4: Chercher "X 90's" et convertir
+            match = re.search(r'Based on\s+(?:<[^>]+>)?(\d+\.?\d*)\s+90', html_content, re.IGNORECASE)
+            if match:
+                ninety_mins = float(match.group(1))
+                minutes = int(ninety_mins * 90)
+                self._log(f"Minutes jouées trouvées (90's) : {minutes} min ({ninety_mins} × 90) ✓", "SUCCESS")
+                return minutes
+            
+            self._log("Minutes jouées non trouvées", "WARNING")
+            return None
+            
+        except Exception as e:
+            self._log(f"Erreur extraction minutes : {e}", "WARNING")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _extract_player_metadata(self, html_content: str) -> Dict:
+        """
+        Extrait les métadonnées du joueur depuis le HTML
+        Nom, âge, position, taille, poids, pied fort, nationalité, saison, compétition, minutes, etc.
+        """
+        self._log("Extraction des métadonnées du joueur...")
+        
+        soup = BeautifulSoup(html_content, 'html.parser')
+        metadata = {}
+        
+        try:
+            # Saison et compétition depuis le titre de la page
+            title = soup.find('title')
+            if title:
+                title_text = title.get_text()
+                # Ex: "Marco Verratti Scouting Report for 2022-2023 Champions League | FBref.com"
+                self._log(f"Titre de la page : {title_text}", "DEBUG")
+                
+                # Extraire la saison (ex: 2022-2023)
+                season_match = re.search(r'(\d{4}-\d{4})', title_text)
+                if season_match:
+                    metadata['season'] = season_match.group(1)
+                    self._log(f"Saison trouvée : {metadata['season']}", "DEBUG")
+                
+                # Extraire la compétition (entre "for" et "|")
+                comp_match = re.search(r'for\s+(.+?)\s*\|', title_text)
+                if comp_match:
+                    comp_text = comp_match.group(1).strip()
+                    # Retirer la saison si elle est dans la compétition
+                    if metadata.get('season'):
+                        comp_text = comp_text.replace(metadata['season'], '').strip()
+                    metadata['competition'] = comp_text
+                    self._log(f"Compétition trouvée : {metadata['competition']}", "DEBUG")
+            
+            # Nom du joueur
+            name_tag = soup.find('h1')
+            if name_tag:
+                name_span = name_tag.find('span')
+                if name_span:
+                    metadata['name'] = name_span.get_text(strip=True)
+                else:
+                    metadata['name'] = name_tag.get_text(strip=True)
+                self._log(f"Nom trouvé : {metadata.get('name')}", "DEBUG")
+            
+            # Position et pied fort
+            position_p = soup.find('p', string=lambda x: x and 'Position:' in str(x))
+            if position_p:
+                text = position_p.get_text()
+                # Position: MF (CM-DM-WM) • Footed: Right
+                if 'Position:' in text:
+                    parts = text.split('Position:')[1]
+                    if 'Footed:' in parts:
+                        pos_part = parts.split('Footed:')[0].strip()
+                        foot_part = parts.split('Footed:')[1].strip()
+                        metadata['position'] = pos_part.replace('•', '').strip()
+                        metadata['footed'] = foot_part
+                    else:
+                        metadata['position'] = parts.strip().replace('•', '').strip()
+                self._log(f"Position : {metadata.get('position')}, Pied : {metadata.get('footed')}", "DEBUG")
+            
+            # Taille et poids
+            size_p = soup.find('p', string=lambda x: x and 'cm' in str(x))
+            if size_p:
+                text = size_p.get_text()
+                # 165cm, 59kg (5-5, 132lb)
+                height_match = re.search(r'(\d+)cm', text)
+                weight_match = re.search(r'(\d+)kg', text)
+                if height_match:
+                    metadata['height_cm'] = int(height_match.group(1))
+                if weight_match:
+                    metadata['weight_kg'] = int(weight_match.group(1))
+                self._log(f"Taille : {metadata.get('height_cm')}cm, Poids : {metadata.get('weight_kg')}kg", "DEBUG")
+            
+            # Date de naissance et âge
+            birth_span = soup.find('span', {'id': 'necro-birth'})
+            if birth_span:
+                metadata['birth_date'] = birth_span.get('data-birth')
+                # Calculer l'âge
+                if metadata['birth_date']:
+                    birth = datetime.strptime(metadata['birth_date'], '%Y-%m-%d')
+                    today = datetime.today()
+                    age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+                    metadata['age'] = age
+                self._log(f"Date de naissance : {metadata.get('birth_date')}, Âge : {metadata.get('age')}", "DEBUG")
+            
+            # Lieu de naissance
+            birth_place = soup.find('span', {'itemprop': 'birthPlace'})
+            if birth_place:
+                metadata['birth_place'] = birth_place.get_text(strip=True)
+                self._log(f"Lieu de naissance : {metadata.get('birth_place')}", "DEBUG")
+            
+            # Citoyenneté
+            citizenship_p = soup.find('p', string=lambda x: x and 'Citizenship:' in str(x))
+            if citizenship_p:
+                citizenship_link = citizenship_p.find('a')
+                if citizenship_link:
+                    metadata['citizenship'] = citizenship_link.get_text(strip=True)
+                    self._log(f"Nationalité : {metadata.get('citizenship')}", "DEBUG")
+            
+            # Minutes jouées (NOUVEAU)
+            minutes = self._extract_minutes_played(html_content)
+            if minutes is not None:
+                metadata['minutes_played'] = minutes
+            
+            self._log(f"Métadonnées extraites : {len(metadata)} champs ✓", "SUCCESS")
+            
+        except Exception as e:
+            self._log(f"Erreur extraction métadonnées : {e}", "WARNING")
+            import traceback
+            traceback.print_exc()
+        
+        return metadata
+    
+    def scrape_player(self, url: str, table_id: str, player_name: str = None) -> Tuple[Optional[pd.DataFrame], Dict]:
+        """
+        Scrape les données d'un joueur + métadonnées
         
         Args:
             url: URL FBref du joueur
-            table_id: ID de la table à extraire (ex: 'scout_full_MF')
-            player_name: Nom du joueur (pour les logs)
+            table_id: ID de la table à extraire
+            player_name: Nom du joueur (optionnel)
             
         Returns:
-            DataFrame avec les données ou None si erreur
+            Tuple (DataFrame avec les données, Dict avec métadonnées)
         """
         self._log("="*80)
         self._log(f"DÉBUT SCRAPING : {player_name or 'Joueur'}", "START")
@@ -228,35 +362,32 @@ class FBrefScraper:
             # Télécharger la page
             html_content = self._download_page(url)
             if not html_content:
-                return None
+                return None, {}
+            
+            # Extraire les métadonnées (incluant les minutes)
+            metadata = self._extract_player_metadata(html_content)
             
             # Extraire la table
             table = self._extract_table(html_content, table_id)
             if table is None:
-                return None
+                return None, metadata
             
             # Parser en DataFrame
             df = self._parse_table_to_dataframe(table)
             if df is None:
-                return None
-            
-            # Ajouter des métadonnées
-            df.attrs['player_name'] = player_name
-            df.attrs['url'] = url
-            df.attrs['table_id'] = table_id
-            df.attrs['scraped_at'] = datetime.now().isoformat()
+                return None, metadata
             
             self._log("="*80)
-            self._log(f"SCRAPING TERMINÉ : {len(df)} statistiques extraites ✓", "SUCCESS")
+            self._log(f"SCRAPING TERMINÉ ✓", "SUCCESS")
             self._log("="*80)
             
-            return df
+            return df, metadata
             
         except Exception as e:
             self._log(f"Erreur lors du scraping : {e}", "ERROR")
             import traceback
             traceback.print_exc()
-            return None
+            return None, {}
     
     def close(self):
         """Ferme le driver Selenium"""
@@ -275,26 +406,3 @@ class FBrefScraper:
     def get_last_html(self) -> Optional[str]:
         """Retourne le dernier HTML téléchargé (pour debug)"""
         return self.last_html
-
-
-# Exemple d'utilisation
-if __name__ == "__main__":
-    # Configuration
-    PLAYER_URL = 'https://fbref.com/en/players/1467af0d/scout/11454/Marco-Verratti-Scouting-Report'
-    TABLE_ID = 'scout_full_MF'
-    PLAYER_NAME = 'Marco Verratti'
-    
-    # Utilisation avec context manager
-    with FBrefScraper(wait_time=10, headless=True) as scraper:
-        df = scraper.scrape_player(PLAYER_URL, TABLE_ID, PLAYER_NAME)
-        
-        if df is not None:
-            print("\n" + "="*80)
-            print("APERÇU DES DONNÉES")
-            print("="*80)
-            print(df.head(10))
-            
-            # Sauvegarder
-            output_file = 'verratti_raw_data.csv'
-            df.to_csv(output_file, index=False, encoding='utf-8-sig')
-            print(f"\n✓ Données sauvegardées : {output_file}")
