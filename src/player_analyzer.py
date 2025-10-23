@@ -1,5 +1,5 @@
 """
-PlayerAnalyzer V9 - Style avec dégradé + infos contextuelles enrichies
+PlayerAnalyzer V10 - Style avec dégradé + fond complet
 """
 
 import pandas as pd
@@ -67,7 +67,6 @@ class PlayerAnalyzer:
             except:
                 self.stats[col] = df[col].iloc[0]
         
-        # Extraire saison et compétition
         if 'season' in df.columns:
             self.season = df['season'].iloc[0]
         if 'competition' in df.columns:
@@ -100,7 +99,7 @@ class PlayerAnalyzer:
                          edgecolor='white', linewidth=2, alpha=0.8))
     
     def _add_context_info(self, fig):
-        """Ajoute les infos de contexte (saison, compétition, position)"""
+        """Ajoute les infos de contexte"""
         context_text = f"Position: {self.position}"
         if self.season:
             context_text += f" | Saison: {self.season}"
@@ -161,17 +160,15 @@ class PlayerAnalyzer:
         values_normalized += values_normalized[:1]
         angles += angles[:1]
         
-        fig = plt.figure(figsize=(16, 9))
+        fig = plt.figure(figsize=(16, 9), facecolor=self.COLORS['gradient_end'])
         self._create_gradient_background(fig)
         
         ax = fig.add_subplot(111, projection='polar', facecolor='none')
         
-        # Tracer
         ax.plot(angles, values_normalized, 'o-', linewidth=4, color=self.COLORS['points'], 
                 markersize=16, markeredgecolor=self.COLORS['edge'], markeredgewidth=2, zorder=5)
         ax.fill(angles, values_normalized, alpha=0.3, color=self.COLORS['points'], zorder=4)
         
-        # Style
         ax.set_ylim(0, 100)
         ax.set_yticks([25, 50, 75, 100])
         ax.set_yticklabels(['25', '50', '75', '100'], size=14, 
@@ -184,36 +181,32 @@ class PlayerAnalyzer:
         ax.spines['polar'].set_color('white')
         ax.spines['polar'].set_linewidth(2.5)
         
-        # Valeurs sur les points
         for angle, value in zip(angles[:-1], values_normalized[:-1]):
             ax.text(angle, value + 10, f'{value:.0f}', 
                    ha='center', va='center', size=14, fontweight='bold',
                    color='white')
         
-        # Titre
         plt.title(f'{self.player_name}\nPROFIL TACTIQUE', 
                  size=28, fontweight='bold', pad=50, color='white')
         
-        # Explication
         explanation = "Scores normalisés par catégorie (0-100)\nChaque catégorie regroupe 5 statistiques clés"
         fig.text(0.5, 0.92, explanation, 
                 ha='center', va='top', fontsize=11, color='white', 
                 style='italic', alpha=0.9)
         
-        # Légende des seuils
         legend_text = "🔴 <50: À améliorer  |  🟡 50-70: Bon niveau  |  🟢 >70: Élite"
         fig.text(0.5, 0.08, legend_text, 
                 ha='center', va='bottom', fontsize=12, color='white', 
                 fontweight='bold', alpha=0.9)
         
-        # Watermark et contexte
         self._add_watermark(fig)
         self._add_context_info(fig)
         
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
+                       facecolor=self.COLORS['gradient_end'])
         plt.close()
     
     def plot_scatter_progressive(self, save_path: Optional[str] = None):
@@ -221,58 +214,51 @@ class PlayerAnalyzer:
         prog_passes = self._get_stat_value('Progressive Passes')
         prog_carries = self._get_stat_value('Progressive Carries')
         
-        fig = plt.figure(figsize=(16, 9))
+        fig = plt.figure(figsize=(16, 9), facecolor=self.COLORS['gradient_end'])
         self._create_gradient_background(fig)
         
         ax = fig.add_subplot(111, facecolor='none')
         
-        # Point du joueur
         ax.scatter(prog_passes, prog_carries, s=300, color=self.COLORS['points'], 
                   edgecolor=self.COLORS['edge'], linewidth=3, zorder=5)
         
-        # Label
         ax.text(prog_passes + 0.3, prog_carries + 0.2, self.player_name, 
                ha='right', va='bottom', fontsize=14, fontweight='bold',
                color='white', zorder=6,
                bbox=dict(boxstyle='round,pad=0.4', facecolor='black', 
                         edgecolor='white', linewidth=1.5, alpha=0.7))
         
-        # Limites
         x_min, x_max = 0, max(12, prog_passes + 2)
         y_min, y_max = 0, max(10, prog_carries + 2)
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
         
-        # Labels
         ax.set_xlabel('Passes progressives (par 90")', fontsize=16, 
                      color='white', fontweight='bold')
         ax.set_ylabel('Possessions progressives (par 90")', fontsize=16, 
                      color='white', fontweight='bold')
         
-        # Titre
         ax.set_title('Projection des Passes et des Possessions progressives', 
                     fontsize=25, color='white', fontweight='bold', pad=20)
         
-        # Explication
         explanation = "Passes progressives : passes qui rapprochent significativement le ballon du but adverse\nPossessions progressives : dribbles qui progressent vers le but adverse"
         fig.text(0.5, 0.92, explanation, 
                 ha='center', va='top', fontsize=10, color='white', 
                 style='italic', alpha=0.9)
         
-        # Style
         self._customize_axes(ax)
         ax.tick_params(axis='both', colors='white', labelsize=14)
         ax.set_xticks(np.arange(x_min, x_max + 1, 1))
         ax.set_yticks(np.arange(y_min, y_max + 1, 1))
         
-        # Watermark et contexte
         self._add_watermark(fig)
         self._add_context_info(fig)
         
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
+                       facecolor=self.COLORS['gradient_end'])
         plt.close()
     
     def plot_key_stats_cards(self, save_path: Optional[str] = None):
@@ -286,26 +272,22 @@ class PlayerAnalyzer:
             ('Key Passes', 'PASSES CLÉS')
         ]
         
-        fig = plt.figure(figsize=(16, 9))
+        fig = plt.figure(figsize=(16, 9), facecolor=self.COLORS['gradient_end'])
         self._create_gradient_background(fig)
         
-        # Grille 2x3
         for i, (stat_key, stat_label) in enumerate(key_stats):
             ax = plt.subplot(2, 3, i+1, facecolor='none')
             
             value = self._get_stat_value(stat_key)
             
-            # Valeur
             ax.text(0.5, 0.6, f'{value:.2f}', 
                    ha='center', va='center', fontsize=40, fontweight='bold',
                    color='white')
             
-            # Label
             ax.text(0.5, 0.3, stat_label, 
                    ha='center', va='center', fontsize=16, fontweight='bold',
                    color='white')
             
-            # Par 90'
             ax.text(0.5, 0.15, 'par 90\'', 
                    ha='center', va='center', fontsize=11, style='italic',
                    color='white', alpha=0.8)
@@ -314,30 +296,27 @@ class PlayerAnalyzer:
             ax.set_ylim(0, 1)
             ax.axis('off')
             
-            # Bordure blanche
             rect = mpatches.Rectangle((0, 0), 1, 1, linewidth=2.5, 
                                      edgecolor='white', facecolor='none', 
                                      transform=ax.transAxes)
             ax.add_patch(rect)
         
-        # Titre
         fig.suptitle(f'{self.player_name}\nSTATISTIQUES CLÉS', 
                     fontsize=28, fontweight='bold', color='white', y=0.98)
         
-        # Sous-titre
         subtitle = "Moyennes par 90 minutes jouées"
         fig.text(0.5, 0.91, subtitle, 
                 ha='center', va='top', fontsize=12, color='white', 
                 style='italic', alpha=0.9)
         
-        # Watermark et contexte
         self._add_watermark(fig)
         self._add_context_info(fig)
         
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
+                       facecolor=self.COLORS['gradient_end'])
         plt.close()
     
     def plot_percentile_bars(self, save_path: Optional[str] = None):
@@ -345,29 +324,25 @@ class PlayerAnalyzer:
         categories = list(self.CATEGORIES.keys())
         scores = [self._get_category_average_normalized(cat) for cat in categories]
         
-        fig = plt.figure(figsize=(16, 9))
+        fig = plt.figure(figsize=(16, 9), facecolor=self.COLORS['gradient_end'])
         self._create_gradient_background(fig)
         
         ax = fig.add_subplot(111, facecolor='none')
         
-        # Barres
         bars = ax.barh(categories, scores, height=0.6, color=self.COLORS['points'], 
                       edgecolor=self.COLORS['edge'], linewidth=2, alpha=0.8)
         
-        # Valeurs
         for i, (bar, score) in enumerate(zip(bars, scores)):
             ax.text(score + 3, i, f'{score:.0f}', 
                    va='center', ha='left', fontsize=16, fontweight='bold',
                    color='white')
         
-        # Style
         ax.set_xlim(0, 110)
         ax.set_xlabel('SCORE NORMALISÉ (0-100)', fontsize=16, color='white', fontweight='bold')
         ax.tick_params(axis='both', colors='white', labelsize=14)
         
         self._customize_axes(ax)
         
-        # Lignes de référence avec labels
         ax.axvline(50, color='white', linestyle='--', linewidth=2, alpha=0.6, zorder=3)
         ax.axvline(70, color='white', linestyle='--', linewidth=2, alpha=0.6, zorder=3)
         
@@ -378,18 +353,17 @@ class PlayerAnalyzer:
                ha='center', va='bottom', fontsize=10, color='white', 
                fontweight='bold', alpha=0.8)
         
-        # Titre
         ax.set_title(f'{self.player_name}\nÉVALUATION PAR CATÉGORIE', 
                     fontsize=28, fontweight='bold', color='white', pad=20)
         
-        # Watermark et contexte
         self._add_watermark(fig)
         self._add_context_info(fig)
         
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
+                       facecolor=self.COLORS['gradient_end'])
         plt.close()
     
     def plot_performance_grid(self, save_path: Optional[str] = None):
@@ -406,25 +380,22 @@ class PlayerAnalyzer:
                 matrix_data.append(row)
                 row_labels.append(category)
         
-        fig = plt.figure(figsize=(16, 9))
+        fig = plt.figure(figsize=(16, 9), facecolor=self.COLORS['gradient_end'])
         self._create_gradient_background(fig)
         
         ax = fig.add_subplot(111, facecolor='none')
         
-        # Colormap rouge
         cmap = LinearSegmentedColormap.from_list('custom',
             ['white', self.COLORS['points']], N=256)
         
         im = ax.imshow(matrix_data, cmap=cmap, aspect='auto', vmin=0, vmax=100)
         
-        # Labels
         ax.set_yticks(range(len(row_labels)))
         ax.set_yticklabels(row_labels, fontsize=14, fontweight='bold', color='white')
         ax.set_xticks(range(5))
         ax.set_xticklabels([f'Stat {i+1}' for i in range(5)], 
                           fontsize=12, color='white')
         
-        # Annotations
         for i in range(len(matrix_data)):
             for j in range(len(matrix_data[i])):
                 val = matrix_data[i][j]
@@ -433,31 +404,28 @@ class PlayerAnalyzer:
                     ax.text(j, i, f'{val:.0f}', ha='center', va='center',
                            fontsize=14, fontweight='bold', color=color)
         
-        # Colorbar
         cbar = plt.colorbar(im, ax=ax, pad=0.02)
         cbar.set_label('Score (0-100)', fontsize=14, color='white', fontweight='bold')
         cbar.ax.tick_params(colors='white', labelsize=12)
         cbar.outline.set_edgecolor('white')
         cbar.outline.set_linewidth(2)
         
-        # Titre
         plt.title(f'{self.player_name}\nMATRICE DE PERFORMANCE DÉTAILLÉE', 
                  fontsize=25, fontweight='bold', color='white', pad=20)
         
-        # Explication
         explanation = "Chaque ligne = 1 catégorie | Chaque colonne = 1 statistique de la catégorie"
         fig.text(0.5, 0.92, explanation, 
                 ha='center', va='top', fontsize=10, color='white', 
                 style='italic', alpha=0.9)
         
-        # Watermark et contexte
         self._add_watermark(fig)
         self._add_context_info(fig)
         
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
+                       facecolor=self.COLORS['gradient_end'])
         plt.close()
     
     def print_tactical_summary(self):
