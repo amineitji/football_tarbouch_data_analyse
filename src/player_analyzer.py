@@ -1,30 +1,29 @@
 """
-PlayerAnalyzer V5 - Visualisations avec normalisation intelligente
-Harmonisation des échelles pour une meilleure lisibilité
+PlayerAnalyzer V8 - Style avec dégradé blanc vers couleur pastel
+Design inspiré de l'exemple fourni
 """
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.colors import LinearSegmentedColormap
 import seaborn as sns
 from typing import Dict, List, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
 plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans']
-plt.rcParams['figure.facecolor'] = 'white'
-plt.rcParams['axes.facecolor'] = '#f8f9fa'
+plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'Helvetica']
 
 
 class PlayerAnalyzer:
-    """Analyseur tactique avec normalisation intelligente des échelles"""
+    """Analyseur tactique avec style dégradé blanc-pastel"""
     
-    # Catégories avec stats réelles des données
     CATEGORIES = {
         'Passing': {
             'stats': ['Passes Completed', 'Progressive Passes', 'Passes into Final Third', 'Key Passes', 'xA: Expected Assists'],
-            'scales': [100, 10, 10, 2, 0.5]  # Valeurs de référence pour normalisation
+            'scales': [100, 10, 10, 2, 0.5]
         },
         'Shooting': {
             'stats': ['Goals', 'Shots Total', 'Shots on Target', 'xG: Expected Goals', 'npxG: Non-Penalty xG'],
@@ -44,13 +43,13 @@ class PlayerAnalyzer:
         }
     }
     
+    # Couleurs style dégradé pastel
     COLORS = {
-        'primary': '#2E86AB',
-        'secondary': '#A23B72',
-        'success': '#06A77D',
-        'warning': '#F18F01',
-        'danger': '#C73E1D',
-        'gradient': ['#2E86AB', '#06A77D', '#F18F01', '#A23B72', '#C73E1D']
+        'gradient_start': "#000000",  # Blanc
+        'gradient_end': "#96943C",    # Violet pastel
+        'points': '#FF0000',          # Rouge pour les points
+        'text': '#FFFFFF',            # Blanc pour le texte
+        'edge': '#000000'             # Noir pour les contours
     }
     
     def __init__(self, player_name: str, position: str):
@@ -62,20 +61,41 @@ class PlayerAnalyzer:
     def load_data(self, df: pd.DataFrame):
         """Charge les données"""
         self.df = df
-        # Convertir toutes les colonnes en float si possible
         for col in df.columns:
             try:
                 self.stats[col] = float(df[col].iloc[0])
             except:
                 self.stats[col] = df[col].iloc[0]
     
+    def _create_gradient_background(self, fig):
+        """Crée un fond en dégradé vertical (blanc en haut, pastel en bas)"""
+        gradient = np.linspace(0, 1, 256).reshape(-1, 1)
+        gradient = np.hstack((gradient, gradient))
+        
+        cmap = LinearSegmentedColormap.from_list("", 
+            [self.COLORS['gradient_start'], self.COLORS['gradient_end']])
+        
+        ax_bg = fig.add_axes([0, 0, 1, 1])
+        ax_bg.axis('off')
+        ax_bg.imshow(gradient, aspect='auto', cmap=cmap, extent=[0, 1, 0, 1], zorder=-1)
+    
+    def _customize_axes(self, ax):
+        """Personnalise les axes avec contours blancs épais"""
+        for spine in ax.spines.values():
+            spine.set_edgecolor('white')
+            spine.set_linewidth(2.5)
+    
+    def _add_watermark(self, ax):
+        """Ajoute le watermark @TarbouchData"""
+        ax.text(0.5, 0.75, '@TarbouchData', 
+                fontsize=14, color='white', fontweight='bold', 
+                ha='left', transform=ax.transAxes, alpha=0.8)
+    
     def _get_stat_value(self, stat_name: str) -> float:
-        """Récupère la valeur d'une stat (recherche flexible)"""
-        # Recherche exacte
+        """Récupère la valeur d'une stat"""
         if stat_name in self.stats:
             return self.stats[stat_name]
         
-        # Recherche partielle
         stat_lower = stat_name.lower()
         for key, value in self.stats.items():
             if stat_lower in key.lower():
@@ -84,10 +104,9 @@ class PlayerAnalyzer:
         return 0.0
     
     def _normalize_stat(self, value: float, reference: float) -> float:
-        """Normalise une stat sur une échelle 0-100 selon une référence"""
+        """Normalise une stat sur 0-100"""
         if reference == 0:
             return 0
-        # Normalisation: (valeur / référence) * 100, plafonné à 100
         normalized = (value / reference) * 100
         return min(normalized, 100)
     
@@ -106,7 +125,7 @@ class PlayerAnalyzer:
         return result
     
     def _get_category_average_normalized(self, category: str) -> float:
-        """Moyenne normalisée d'une catégorie (0-100)"""
+        """Moyenne normalisée d'une catégorie"""
         stats = self._get_category_stats_normalized(category)
         if not stats:
             return 0
@@ -114,7 +133,7 @@ class PlayerAnalyzer:
         return np.mean(normalized_values)
     
     def plot_spider_radar(self, save_path: Optional[str] = None):
-        """Spider radar NORMALISÉ - Échelle 0-100 pour toutes les catégories"""
+        """Spider radar style dégradé"""
         categories = list(self.CATEGORIES.keys())
         values_normalized = [self._get_category_average_normalized(cat) for cat in categories]
         
@@ -122,278 +141,275 @@ class PlayerAnalyzer:
         values_normalized += values_normalized[:1]
         angles += angles[:1]
         
-        fig = plt.figure(figsize=(12, 12), facecolor='white')
-        ax = fig.add_subplot(111, projection='polar', facecolor='#f8f9fa')
+        fig = plt.figure(figsize=(16, 9))
+        self._create_gradient_background(fig)
+        
+        ax = fig.add_subplot(111, projection='polar', facecolor='none')
         
         # Tracer
-        ax.plot(angles, values_normalized, 'o-', linewidth=4, color=self.COLORS['primary'], 
-                markersize=14, markeredgecolor='white', markeredgewidth=3, zorder=3)
-        ax.fill(angles, values_normalized, alpha=0.35, color=self.COLORS['primary'], zorder=2)
+        ax.plot(angles, values_normalized, 'o-', linewidth=4, color=self.COLORS['points'], 
+                markersize=16, markeredgecolor=self.COLORS['edge'], markeredgewidth=2, zorder=5)
+        ax.fill(angles, values_normalized, alpha=0.3, color=self.COLORS['points'], zorder=4)
         
-        # Échelle fixe 0-100
+        # Style
         ax.set_ylim(0, 100)
-        ax.set_yticks([20, 40, 60, 80, 100])
-        ax.set_yticklabels(['20', '40', '60', '80', '100'], size=11, color='#666', weight='bold')
+        ax.set_yticks([25, 50, 75, 100])
+        ax.set_yticklabels(['25', '50', '75', '100'], size=14, 
+                          color='white', fontweight='bold')
         
-        # Grille colorée
-        for ytick in [20, 40, 60, 80, 100]:
-            circle = plt.Circle((0, 0), ytick, transform=ax.transData._b, 
-                              fill=False, edgecolor='#ddd', linewidth=2, zorder=1)
-            ax.add_artist(circle)
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(categories, size=16, fontweight='bold', color='white')
+        
+        ax.grid(color='white', linestyle='-', linewidth=2, alpha=0.5)
+        ax.spines['polar'].set_color('white')
+        ax.spines['polar'].set_linewidth(2.5)
+        
+        # Valeurs
+        for angle, value in zip(angles[:-1], values_normalized[:-1]):
+            ax.text(angle, value + 10, f'{value:.0f}', 
+                   ha='center', va='center', size=14, fontweight='bold',
+                   color='white')
+        
+        # Titre
+        plt.title(f'{self.player_name}\nPROFIL TACTIQUE', 
+                 size=25, fontweight='bold', pad=40, color='white')
+        
+        # Watermark
+        self._add_watermark(ax)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
+        plt.close()
+    
+    def plot_scatter_progressive(self, save_path: Optional[str] = None):
+        """Scatter plot - Passes vs Possessions progressives"""
+        prog_passes = self._get_stat_value('Progressive Passes')
+        prog_carries = self._get_stat_value('Progressive Carries')
+        
+        fig = plt.figure(figsize=(16, 9))
+        self._create_gradient_background(fig)
+        
+        ax = fig.add_subplot(111, facecolor='none')
+        
+        # Point du joueur
+        ax.scatter(prog_passes, prog_carries, s=200, color=self.COLORS['points'], 
+                  edgecolor=self.COLORS['edge'], linewidth=2, zorder=5)
+        
+        # Label
+        ax.text(prog_passes + 0.2, prog_carries + 0.1, self.player_name, 
+               ha='right', va='bottom', fontsize=12, fontweight='bold',
+               color='white', zorder=6)
+        
+        # Limites
+        x_min, x_max = 0, max(12, prog_passes + 2)
+        y_min, y_max = 0, max(10, prog_carries + 2)
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
         
         # Labels
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(categories, size=15, weight='bold', color='#333')
+        ax.set_xlabel('Passes progressives (par 90")', fontsize=16, 
+                     color='white', fontweight='bold')
+        ax.set_ylabel('Possessions progressives (par 90")', fontsize=16, 
+                     color='white', fontweight='bold')
         
-        # Valeurs sur les points
-        for angle, value in zip(angles[:-1], values_normalized[:-1]):
-            # Couleur selon performance
-            color = self.COLORS['success'] if value >= 70 else self.COLORS['warning'] if value >= 50 else self.COLORS['danger']
-            ax.text(angle, value + 8, f'{value:.0f}', 
-                   ha='center', va='center', size=13, weight='bold',
-                   bbox=dict(boxstyle='round,pad=0.6', facecolor='white', 
-                            edgecolor=color, linewidth=2.5))
+        # Titre
+        ax.set_title('Projection des Passes et des Possessions progressives', 
+                    fontsize=25, color='white', fontweight='bold')
         
-        # Zones de performance
-        ax.fill_between(angles, 0, 50, alpha=0.05, color='red', zorder=0)
-        ax.fill_between(angles, 50, 70, alpha=0.05, color='orange', zorder=0)
-        ax.fill_between(angles, 70, 100, alpha=0.05, color='green', zorder=0)
+        # Watermark
+        self._add_watermark(ax)
         
-        plt.title(f'{self.player_name}\nProfil Tactique Global (Normalisé)', 
-                 size=20, weight='bold', pad=40, color='#222')
-        
-        fig.text(0.5, 0.92, f'Position: {self.position} | Échelle: 0-100 (normalisée)', 
-                ha='center', size=12, color='#666', style='italic')
+        # Style
+        self._customize_axes(ax)
+        ax.tick_params(axis='both', colors='white', labelsize=14)
+        ax.set_xticks(np.arange(x_min, x_max + 1, 1))
+        ax.set_yticks(np.arange(y_min, y_max + 1, 1))
         
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
         plt.close()
     
-    def plot_category_details(self, category: str, save_path: Optional[str] = None):
-        """Détail d'une catégorie avec valeurs réelles ET normalisées"""
-        stats_data = self._get_category_stats_normalized(category)
+    def plot_key_stats_cards(self, save_path: Optional[str] = None):
+        """Cartes de stats clés avec dégradé"""
+        key_stats = [
+            ('Goals', 'BUTS'),
+            ('Assists', 'PASSES D.'),
+            ('Progressive Passes', 'PASSES PROG.'),
+            ('Tackles Won', 'TACLES'),
+            ('xG: Expected Goals', 'xG'),
+            ('Key Passes', 'PASSES CLÉS')
+        ]
         
-        if not stats_data:
-            return
+        fig = plt.figure(figsize=(16, 9))
+        self._create_gradient_background(fig)
         
-        stat_names = list(stats_data.keys())
-        raw_values = [v[0] for v in stats_data.values()]
-        normalized_values = [v[1] for v in stats_data.values()]
+        # Grille 2x3
+        for i, (stat_key, stat_label) in enumerate(key_stats):
+            ax = plt.subplot(2, 3, i+1, facecolor='none')
+            
+            value = self._get_stat_value(stat_key)
+            
+            # Valeur
+            ax.text(0.5, 0.6, f'{value:.2f}', 
+                   ha='center', va='center', fontsize=40, fontweight='bold',
+                   color='white')
+            
+            # Label
+            ax.text(0.5, 0.3, stat_label, 
+                   ha='center', va='center', fontsize=16, fontweight='bold',
+                   color='white')
+            
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            
+            # Bordure blanche
+            rect = mpatches.Rectangle((0, 0), 1, 1, linewidth=2.5, 
+                                     edgecolor='white', facecolor='none', 
+                                     transform=ax.transAxes)
+            ax.add_patch(rect)
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6), facecolor='white')
+        # Titre
+        fig.suptitle(f'{self.player_name}\nSTATISTIQUES CLÉS', 
+                    fontsize=25, fontweight='bold', color='white', y=0.98)
         
-        # Graphique 1: Valeurs réelles
-        colors1 = [self.COLORS['primary']] * len(stat_names)
-        bars1 = ax1.barh(stat_names, raw_values, color=colors1, edgecolor='white', linewidth=2, alpha=0.85)
+        # Watermark
+        fig.text(0.5, 0.02, '@TarbouchData', 
+                ha='left', va='bottom', fontsize=14, 
+                color='white', fontweight='bold', alpha=0.8)
         
-        for bar, val in zip(bars1, raw_values):
-            ax1.text(val + max(raw_values) * 0.02, bar.get_y() + bar.get_height()/2, 
-                    f'{val:.2f}', va='center', ha='left', size=11, weight='bold')
-        
-        ax1.set_xlabel('Valeur Réelle (Per 90)', size=13, weight='bold', color='#333')
-        ax1.set_title(f'{category} - Valeurs Réelles', size=15, weight='bold', pad=15)
-        ax1.spines['top'].set_visible(False)
-        ax1.spines['right'].set_visible(False)
-        ax1.grid(axis='x', alpha=0.2, linestyle='--')
-        ax1.set_facecolor('#f8f9fa')
-        
-        # Graphique 2: Valeurs normalisées
-        colors2 = [self.COLORS['success'] if v >= 70 else self.COLORS['warning'] if v >= 50 else self.COLORS['danger'] 
-                   for v in normalized_values]
-        bars2 = ax2.barh(stat_names, normalized_values, color=colors2, edgecolor='white', linewidth=2, alpha=0.85)
-        
-        for bar, val in zip(bars2, normalized_values):
-            ax2.text(val + 3, bar.get_y() + bar.get_height()/2, 
-                    f'{val:.0f}', va='center', ha='left', size=11, weight='bold')
-        
-        ax2.set_xlabel('Score Normalisé (0-100)', size=13, weight='bold', color='#333')
-        ax2.set_title(f'{category} - Performance Normalisée', size=15, weight='bold', pad=15)
-        ax2.set_xlim(0, 110)
-        ax2.axvline(50, color='gray', linestyle='--', alpha=0.5, linewidth=2)
-        ax2.axvline(70, color='green', linestyle='--', alpha=0.5, linewidth=2)
-        ax2.spines['top'].set_visible(False)
-        ax2.spines['right'].set_visible(False)
-        ax2.grid(axis='x', alpha=0.2, linestyle='--')
-        ax2.set_facecolor('#f8f9fa')
-        
-        plt.suptitle(f'{self.player_name} - Analyse {category}', size=17, weight='bold', y=1.02)
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
         plt.close()
     
-    def plot_all_categories_comparison(self, save_path: Optional[str] = None):
-        """Comparaison des 5 catégories avec scores normalisés"""
+    def plot_percentile_bars(self, save_path: Optional[str] = None):
+        """Barres horizontales avec dégradé"""
         categories = list(self.CATEGORIES.keys())
-        normalized_scores = [self._get_category_average_normalized(cat) for cat in categories]
+        scores = [self._get_category_average_normalized(cat) for cat in categories]
         
-        # Trier
-        sorted_data = sorted(zip(categories, normalized_scores), key=lambda x: x[1], reverse=True)
-        categories, normalized_scores = zip(*sorted_data)
+        fig = plt.figure(figsize=(16, 9))
+        self._create_gradient_background(fig)
         
-        fig, ax = plt.subplots(figsize=(14, 8), facecolor='white')
-        ax.set_facecolor('#f8f9fa')
+        ax = fig.add_subplot(111, facecolor='none')
         
-        # Couleurs selon performance
-        colors = [self.COLORS['success'] if v >= 70 else self.COLORS['warning'] if v >= 50 else self.COLORS['danger'] 
-                  for v in normalized_scores]
+        # Barres
+        bars = ax.barh(categories, scores, height=0.6, color=self.COLORS['points'], 
+                      edgecolor=self.COLORS['edge'], linewidth=2, alpha=0.8)
         
-        bars = ax.barh(categories, normalized_scores, height=0.7, color=colors, 
-                      edgecolor='white', linewidth=3, alpha=0.9)
+        # Valeurs
+        for i, (bar, score) in enumerate(zip(bars, scores)):
+            ax.text(score + 3, i, f'{score:.0f}', 
+                   va='center', ha='left', fontsize=16, fontweight='bold',
+                   color='white')
         
-        # Annotations
-        for bar, val in zip(bars, normalized_scores):
-            emoji = '🟢' if val >= 70 else '🟡' if val >= 50 else '🔴'
-            ax.text(val + 3, bar.get_y() + bar.get_height()/2, 
-                   f'{emoji} {val:.0f}', va='center', ha='left', size=14, weight='bold')
-        
-        # Lignes de référence
-        ax.axvline(50, color='gray', linestyle='--', alpha=0.4, linewidth=2, label='Seuil Acceptable')
-        ax.axvline(70, color='green', linestyle='--', alpha=0.4, linewidth=2, label='Seuil Excellent')
-        
-        ax.set_xlabel('Score Normalisé (0-100)', size=14, weight='bold', color='#333')
+        # Style
         ax.set_xlim(0, 110)
-        ax.set_title(f'{self.player_name} - Évaluation Globale par Catégorie\n', 
-                    size=18, weight='bold', pad=20, color='#222')
+        ax.set_xlabel('SCORE (0-100)', fontsize=16, color='white', fontweight='bold')
+        ax.tick_params(axis='both', colors='white', labelsize=14)
         
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_linewidth(2)
-        ax.spines['bottom'].set_linewidth(2)
-        ax.grid(axis='x', alpha=0.2, linestyle='--', linewidth=1.5)
-        ax.legend(loc='lower right', fontsize=10)
+        self._customize_axes(ax)
+        ax.axvline(50, color='white', linestyle='--', linewidth=2, alpha=0.5)
+        ax.axvline(70, color='white', linestyle='--', linewidth=2, alpha=0.5)
         
-        plt.tight_layout()
+        # Titre
+        ax.set_title(f'{self.player_name}\nÉVALUATION PAR CATÉGORIE', 
+                    fontsize=25, fontweight='bold', color='white')
         
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
-        plt.close()
-    
-    def plot_top_stats_absolute(self, top_n: int = 12, save_path: Optional[str] = None):
-        """Top stats avec valeurs ABSOLUES (non normalisées)"""
-        # Filtrer les stats numériques pertinentes
-        relevant_stats = {}
-        for key, value in self.stats.items():
-            if isinstance(value, (int, float)) and value > 0:
-                # Exclure les métadonnées
-                if key not in ['minutes_played', 'age', 'birth_date', 'season']:
-                    relevant_stats[key] = value
-        
-        sorted_stats = sorted(relevant_stats.items(), key=lambda x: x[1], reverse=True)[:top_n]
-        
-        stat_names = [s[0][:40] for s in sorted_stats]
-        stat_values = [s[1] for s in sorted_stats]
-        
-        fig, ax = plt.subplots(figsize=(14, 10), facecolor='white')
-        ax.set_facecolor('#f8f9fa')
-        
-        colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(stat_names)))
-        
-        bars = ax.barh(stat_names, stat_values, height=0.75, color=colors, 
-                      edgecolor='white', linewidth=2.5, alpha=0.9)
-        
-        for bar, val in zip(bars, stat_values):
-            ax.text(val + max(stat_values) * 0.01, bar.get_y() + bar.get_height()/2, 
-                   f'{val:.2f}', va='center', ha='left', size=11, weight='bold', color='#333')
-        
-        ax.set_xlabel('Valeur (Per 90)', size=14, weight='bold', color='#333')
-        ax.set_xlim(0, max(stat_values) * 1.15)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_linewidth(2)
-        ax.spines['bottom'].set_linewidth(2)
-        ax.grid(axis='x', alpha=0.2, linestyle='--', linewidth=1.5)
-        
-        plt.title(f'{self.player_name} - Top {top_n} Statistiques (Valeurs Absolues)\n', 
-                 size=18, weight='bold', pad=20, color='#222')
+        # Watermark
+        self._add_watermark(ax)
         
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
         plt.close()
     
-    def plot_performance_matrix(self, save_path: Optional[str] = None):
-        """Matrice de performance - Vue d'ensemble normalisée"""
+    def plot_performance_grid(self, save_path: Optional[str] = None):
+        """Heatmap avec dégradé de fond"""
         matrix_data = []
         row_labels = []
-        col_labels = []
         
-        for category, cat_info in self.CATEGORIES.items():
+        for category in self.CATEGORIES.keys():
             stats_data = self._get_category_stats_normalized(category)
             if stats_data:
-                row = [v[1] for v in stats_data.values()]  # Valeurs normalisées
+                row = [v[1] for v in stats_data.values()][:5]
+                while len(row) < 5:
+                    row.append(0)
                 matrix_data.append(row)
                 row_labels.append(category)
-                if not col_labels:
-                    col_labels = [s[:20] for s in stats_data.keys()]
         
-        # Uniformiser la longueur
-        max_len = max(len(row) for row in matrix_data)
-        for row in matrix_data:
-            while len(row) < max_len:
-                row.append(0)
+        fig = plt.figure(figsize=(16, 9))
+        self._create_gradient_background(fig)
         
-        fig, ax = plt.subplots(figsize=(15, 8), facecolor='white')
+        ax = fig.add_subplot(111, facecolor='none')
         
-        im = ax.imshow(matrix_data, cmap='RdYlGn', aspect='auto', vmin=0, vmax=100)
+        # Colormap rouge
+        cmap = LinearSegmentedColormap.from_list('custom',
+            ['white', self.COLORS['points']], N=256)
         
+        im = ax.imshow(matrix_data, cmap=cmap, aspect='auto', vmin=0, vmax=100)
+        
+        # Labels
         ax.set_yticks(range(len(row_labels)))
-        ax.set_yticklabels(row_labels, size=13, weight='bold')
-        ax.set_xticks(range(max_len))
-        ax.set_xticklabels([col_labels[i] if i < len(col_labels) else '' for i in range(max_len)], 
-                          rotation=45, ha='right', size=10)
+        ax.set_yticklabels(row_labels, fontsize=14, fontweight='bold', color='white')
+        ax.set_xticks(range(5))
+        ax.set_xticklabels([f'Stat {i+1}' for i in range(5)], 
+                          fontsize=12, color='white')
         
         # Annotations
         for i in range(len(matrix_data)):
             for j in range(len(matrix_data[i])):
                 val = matrix_data[i][j]
                 if val > 0:
-                    text_color = 'white' if val < 50 else 'black'
+                    color = 'white' if val > 50 else 'black'
                     ax.text(j, i, f'{val:.0f}', ha='center', va='center',
-                           size=11, weight='bold', color=text_color)
+                           fontsize=14, fontweight='bold', color=color)
         
-        cbar = plt.colorbar(im, ax=ax, pad=0.02)
-        cbar.set_label('Score Normalisé (0-100)', size=12, weight='bold')
+        # Titre
+        plt.title(f'{self.player_name}\nMATRICE DE PERFORMANCE', 
+                 fontsize=25, fontweight='bold', color='white', pad=20)
         
-        plt.title(f'{self.player_name} - Matrice de Performance Normalisée\n', 
-                 size=18, weight='bold', pad=20, color='#222')
+        # Watermark
+        ax.text(0.5, 0.75, '@TarbouchData', 
+               fontsize=14, color='white', fontweight='bold', 
+               ha='left', transform=ax.transAxes, alpha=0.8)
         
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='none')
         plt.close()
     
     def print_tactical_summary(self):
-        """Résumé textuel avec scores normalisés"""
+        """Résumé textuel"""
         print(f"\n{'='*80}")
-        print(f"  🎯 PROFIL TACTIQUE - {self.player_name} ({self.position})")
+        print(f"  ⚽ PROFIL TACTIQUE - {self.player_name} ({self.position}) ⚽")
         print(f"{'='*80}\n")
         
         for category in self.CATEGORIES.keys():
             score = self._get_category_average_normalized(category)
             
-            # Barre de progression
             bar_length = int(score / 2)
             bar = '█' * bar_length + '░' * (50 - bar_length)
             
-            # Emoji selon performance
             if score >= 70:
                 emoji = '🟢'
-                label = 'EXCELLENT'
+                label = 'ÉLITE'
             elif score >= 50:
                 emoji = '🟡'
                 label = 'BON'
             else:
                 emoji = '🔴'
-                label = 'À AMÉLIORER'
+                label = 'PROGRESSION'
             
             print(f"  {emoji} {category:<12} {bar} {score:>5.0f}/100  [{label}]")
         
         print(f"\n{'='*80}")
-        print(f"  📊 Légende: 🟢 ≥70 (Excellent) | 🟡 50-69 (Bon) | 🔴 <50 (À améliorer)")
+        print(f"  @TarbouchData")
         print(f"{'='*80}\n")

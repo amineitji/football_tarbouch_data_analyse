@@ -1,6 +1,6 @@
 """
-Main V6 - Pipeline avec visualisations style Ballon d'Or
-Design noir et or élégant
+Main V10 - Pipeline universel avec cache CSV
+Saute le scraping si le fichier CSV existe déjà
 """
 
 import os
@@ -8,265 +8,441 @@ from datetime import datetime
 from fbref_scraper import FBrefScraper
 from data_cleaner import DataCleaner
 from player_analyzer import PlayerAnalyzer
+from player_comparator import PlayerComparator
+import pandas as pd
 
 
 def print_banner():
-    """Bannière style Ballon d'Or"""
+    """Bannière"""
     banner = """
     ╔═══════════════════════════════════════════════════════════════════════════╗
     ║                                                                           ║
-    ║             ⚽ FBREF TACTICAL ANALYZER - BALLON D'OR EDITION ⚽           ║
+    ║          ⚽ FBREF UNIVERSAL ANALYZER - BALLON D'OR EDITION ⚽             ║
     ║                                                                           ║
-    ║                    Design Noir & Or - Analyse d'Élite                    ║
+    ║              Analyse individuelle ou comparaison de joueurs              ║
     ║                                                                           ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
     """
     print(banner)
 
 
-def print_section(title: str, emoji: str = ""):
-    """Section stylée"""
+def print_separator(char="=", length=80):
+    """Affiche un séparateur"""
+    print("\n" + char * length)
+
+
+def get_user_choice():
+    """Demande le mode à l'utilisateur"""
+    print("\n🎯 CHOISISSEZ LE MODE D'ANALYSE :\n")
+    print("   1. Analyse d'un seul joueur")
+    print("   2. Comparaison de deux joueurs")
+    print()
+    
+    while True:
+        choice = input("Votre choix (1 ou 2) : ").strip()
+        if choice in ['1', '2']:
+            return int(choice)
+        print("❌ Choix invalide. Entrez 1 ou 2.")
+
+
+def get_player_info(player_number: int = None):
+    """Demande les informations du joueur"""
+    if player_number:
+        print(f"\n{'='*80}")
+        print(f"  🔵 JOUEUR {player_number}" if player_number == 1 else f"  🔴 JOUEUR {player_number}")
+        print("="*80)
+    else:
+        print("\n📋 INFORMATIONS DU JOUEUR :")
+    
+    name = input("   Nom du joueur : ").strip()
+    url = input("   URL FBref (page principale) : ").strip()
+    return name, url
+
+
+def display_seasons_table(available_seasons, player_name: str):
+    """Affiche un tableau formaté des saisons disponibles"""
     print(f"\n{'='*80}")
-    print(f"  {emoji} {title}")
-    print(f"{'='*80}\n")
+    print(f"  📅 SAISONS DISPONIBLES POUR {player_name.upper()}")
+    print("="*80)
+    print(f"\n  {'#':<4} {'Saison':<15} {'Compétition':<30}")
+    print(f"  {'-'*4} {'-'*15} {'-'*30}")
+    
+    for i, report in enumerate(available_seasons, 1):
+        print(f"  {i:<4} {report['season']:<15} {report['competition']:<30}")
+    
+    print("\n" + "="*80)
 
 
-def main():
-    """Pipeline complet avec 5 visualisations Ballon d'Or"""
+def select_season(available_seasons, player_name: str):
+    """Permet de sélectionner une saison avec interface améliorée"""
+    display_seasons_table(available_seasons, player_name)
     
-    print_banner()
+    while True:
+        choice = input(f"\n👉 Choisissez une saison (1-{len(available_seasons)}) : ").strip()
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(available_seasons):
+                selected = available_seasons[idx]
+                print(f"\n✅ Saison sélectionnée : {selected['season']} - {selected['competition']}")
+                return selected
+        except:
+            pass
+        print("❌ Choix invalide. Réessayez.")
+
+
+def load_or_scrape_player(player_name: str, player_url: str, output_dir: str):
+    """
+    Charge les données depuis le CSV s'il existe, sinon scrape
     
-    # ========================================================================
-    # CONFIGURATION
-    # ========================================================================
+    Returns:
+        df_all_seasons, metadata, available_seasons
+    """
+    # Nom du fichier CSV
+    safe_name = player_name.replace(' ', '_')
+    csv_file = os.path.join(output_dir, f"{safe_name}_all_seasons.csv")
     
-    PLAYER_CONFIG = {
-        'name': 'Marco Verratti',
-        'url': 'https://fbref.com/en/players/1467af0d/scout/11454/Marco-Verratti-Scouting-Report',
-        'table_id': 'scout_full_MF',
-        'position': 'MF'
-    }
+    # Vérifier si le CSV existe
+    if os.path.exists(csv_file):
+        print(f"\n💾 CSV trouvé : {csv_file}")
+        use_cache = input("   Utiliser le fichier existant ? (o/n) [o] : ").strip().lower()
+        
+        if use_cache in ['', 'o', 'oui', 'y', 'yes']:
+            print(f"\n✅ Chargement depuis le cache...")
+            
+            try:
+                df_all_seasons = pd.read_csv(csv_file)
+                
+                # Reconstruire available_seasons depuis le DataFrame
+                available_seasons = []
+                for _, row in df_all_seasons[['season', 'competition']].drop_duplicates().iterrows():
+                    available_seasons.append({
+                        'season': row['season'],
+                        'competition': row['competition'],
+                        'text': f"{row['season']} {row['competition']}"
+                    })
+                
+                # Extraire les métadonnées depuis le DataFrame
+                metadata = {
+                    'name': player_name,
+                    'position': df_all_seasons['position'].iloc[0] if 'position' in df_all_seasons.columns else 'MF'
+                }
+                
+                if 'age' in df_all_seasons.columns:
+                    metadata['age'] = df_all_seasons['age'].iloc[0]
+                if 'birth_date' in df_all_seasons.columns:
+                    metadata['birth_date'] = df_all_seasons['birth_date'].iloc[0]
+                
+                print(f"✅ {len(df_all_seasons)} lignes chargées")
+                print(f"✅ {len(available_seasons)} saison(s) disponible(s)")
+                
+                return df_all_seasons, metadata, available_seasons
+                
+            except Exception as e:
+                print(f"⚠️  Erreur lors du chargement du cache : {e}")
+                print("📥 Lancement du scraping...")
     
-    SCRAPER_CONFIG = {
-        'wait_time': 10,
-        'headless': True
-    }
+    # Si pas de cache ou choix de rescaper
+    print(f"\n📥 SCRAPING EN COURS...")
+    
+    scraper = FBrefScraper(wait_time=10, headless=True)
+    
+    try:
+        df_all_seasons, metadata, available_seasons = scraper.scrape_player_all_seasons(
+            player_url=player_url,
+            player_name=player_name
+        )
+        
+        if df_all_seasons is None:
+            return None, None, []
+        
+        # Sauvegarder le CSV
+        df_all_seasons.to_csv(csv_file, index=False, encoding='utf-8-sig')
+        print(f"\n💾 Données sauvegardées : {csv_file}")
+        
+        return df_all_seasons, metadata, available_seasons
+        
+    finally:
+        scraper.close()
+
+
+def analyze_single_player():
+    """Mode analyse d'un seul joueur avec cache CSV"""
+    print_separator()
+    print("  🎯 MODE : ANALYSE INDIVIDUELLE")
+    print_separator()
+    
+    # Récupérer les infos
+    player_name, player_url = get_player_info()
     
     OUTPUT_DIR = './fbref_analysis_output'
     TACTICAL_DIR = './tactical_analysis'
     
-    # Créer les dossiers
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(TACTICAL_DIR, exist_ok=True)
     
-    print(f"📋 CONFIGURATION")
-    print(f"   Joueur      : {PLAYER_CONFIG['name']}")
-    print(f"   Position    : {PLAYER_CONFIG['position']}")
-    print(f"   Output      : {OUTPUT_DIR}")
-    print(f"   Graphiques  : {TACTICAL_DIR}")
-    print(f"   Timestamp   : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    # Charger ou scraper
+    print_separator()
+    print("  📥 CHARGEMENT DES DONNÉES")
+    print_separator()
     
-    print(f"\n✨ VISUALISATIONS BALLON D'OR (5 graphiques élégants) :")
-    print(f"   1️⃣  Spider Radar        → Profil tactique global normalisé")
-    print(f"   2️⃣  Détail Catégorie    → Analyse approfondie d'une catégorie")
-    print(f"   3️⃣  Comparaison Globale → Vue d'ensemble des 5 catégories")
-    print(f"   4️⃣  Top 12 Stats        → Meilleures performances absolues")
-    print(f"   5️⃣  Matrice Performance → Heatmap tactique complète")
-    
-    # ========================================================================
-    # ÉTAPE 1 : SCRAPING
-    # ========================================================================
-    
-    print_section("ÉTAPE 1/3 : SCRAPING DES DONNÉES", "📥")
-    
-    scraper = FBrefScraper(
-        wait_time=SCRAPER_CONFIG['wait_time'],
-        headless=SCRAPER_CONFIG['headless']
+    df_all_seasons, metadata, available_seasons = load_or_scrape_player(
+        player_name, player_url, OUTPUT_DIR
     )
     
-    try:
-        print(f"🌐 Connexion à FBref...")
-        print(f"   URL : {PLAYER_CONFIG['url'][:60]}...")
-        
-        df_raw, metadata = scraper.scrape_player(
-            url=PLAYER_CONFIG['url'],
-            table_id=PLAYER_CONFIG['table_id'],
-            player_name=PLAYER_CONFIG['name']
-        )
-        
-        if df_raw is None:
-            print("\n❌ ERREUR : Échec du scraping")
-            return
-        
-        print(f"\n✅ Scraping réussi")
-        print(f"   Lignes extraites : {len(df_raw)}")
-        print(f"   Colonnes         : {len(df_raw.columns)}")
-        
-        if metadata:
-            print(f"\n📊 MÉTADONNÉES EXTRAITES ({len(metadata)} champs) :")
-            for key, value in metadata.items():
-                print(f"   • {key:<20} : {value}")
-        
-        # Sauvegarder données brutes
-        raw_file = os.path.join(OUTPUT_DIR, f"{PLAYER_CONFIG['name'].replace(' ', '_')}_raw.csv")
-        df_raw.to_csv(raw_file, index=False, encoding='utf-8-sig')
-        print(f"\n💾 Données brutes sauvegardées : {raw_file}")
-        
-    except Exception as e:
-        print(f"\n❌ ERREUR lors du scraping : {e}")
+    if df_all_seasons is None:
+        print("\n❌ Impossible de charger les données")
         return
-    finally:
-        scraper.close()
     
-    # ========================================================================
-    # ÉTAPE 2 : NETTOYAGE
-    # ========================================================================
+    # Sélectionner la saison pour la visualisation
+    selected_season = select_season(available_seasons, player_name)
     
-    print_section("ÉTAPE 2/3 : NETTOYAGE ET TRANSFORMATION", "🧹")
-    
-    print("🔄 Application des transformations...")
-    print("   • Suppression du Percentile (contexte temporel)")
-    print("   • Conversion format horizontal (1 ligne = 1 joueur)")
-    print("   • Nettoyage des stats composées")
-    print("   • Suppression des colonnes vides")
+    # Nettoyage
+    print_separator()
+    print("  🧹 NETTOYAGE DES DONNÉES")
+    print_separator()
     
     cleaner = DataCleaner(verbose=False)
-    df_clean = cleaner.clean(df_raw, metadata)
     
-    print(f"\n✅ Nettoyage terminé")
-    print(f"   Format        : HORIZONTAL")
-    print(f"   Dimensions    : {df_clean.shape[0]} ligne × {df_clean.shape[1]} colonnes")
-    print(f"   Stats conservées : {df_clean.shape[1] - len(metadata or {})}")
+    # Filtrer la saison sélectionnée
+    df_selected = df_all_seasons[
+        (df_all_seasons['season'] == selected_season['season']) &
+        (df_all_seasons['competition'] == selected_season['competition'])
+    ]
     
-    # Sauvegarder données nettoyées
-    clean_file = os.path.join(OUTPUT_DIR, f"{PLAYER_CONFIG['name'].replace(' ', '_')}_clean.csv")
-    df_clean.to_csv(clean_file, index=False, encoding='utf-8-sig')
-    print(f"\n💾 Données nettoyées sauvegardées : {clean_file}")
+    season_metadata = metadata.copy()
+    season_metadata['season'] = selected_season['season']
+    season_metadata['competition'] = selected_season['competition']
     
-    print(f"\n📈 APERÇU DES STATISTIQUES :")
-    preview_stats = {col: df_clean[col].iloc[0] for col in df_clean.select_dtypes(include=['number']).columns[:8]}
-    for stat, value in preview_stats.items():
-        print(f"   • {stat:<30} : {value:.2f}")
-    if len(df_clean.select_dtypes(include=['number']).columns) > 8:
-        print(f"   ... et {len(df_clean.select_dtypes(include=['number']).columns) - 8} autres stats")
+    df_clean = cleaner.clean(df_selected, season_metadata)
     
-    # ========================================================================
-    # ÉTAPE 3 : VISUALISATIONS BALLON D'OR
-    # ========================================================================
+    print(f"\n✅ Données nettoyées pour {selected_season['season']} - {selected_season['competition']}")
     
-    print_section("ÉTAPE 3/3 : GÉNÉRATION DES VISUALISATIONS", "🎨")
+    # Visualisations
+    print_separator()
+    print("  🎨 GÉNÉRATION DES VISUALISATIONS")
+    print_separator()
     
     analyzer = PlayerAnalyzer(
-        player_name=metadata.get('name', PLAYER_CONFIG['name']),
-        position=metadata.get('position', PLAYER_CONFIG['position'])
+        player_name=player_name,
+        position=metadata.get('position', 'MF')
     )
     
     analyzer.load_data(df_clean)
-    
-    # Afficher le résumé tactique
     analyzer.print_tactical_summary()
     
-    print(f"\n🎨 GÉNÉRATION DES GRAPHIQUES BALLON D'OR...")
-    print(f"   Destination : {TACTICAL_DIR}\n")
+    safe_name = f"{player_name.replace(' ', '_')}_{selected_season['season'].replace('-', '_')}_{selected_season['competition'].replace(' ', '_')}"
     
-    safe_name = PLAYER_CONFIG['name'].replace(' ', '_')
+    graphs = [
+        ("Spider Radar", "plot_spider_radar", f"{safe_name}_spider.png"),
+        ("Scatter Progressive", "plot_scatter_progressive", f"{safe_name}_scatter.png"),
+        ("Stats Cards", "plot_key_stats_cards", f"{safe_name}_cards.png"),
+        ("Barres Percentile", "plot_percentile_bars", f"{safe_name}_bars.png"),
+        ("Grille Performance", "plot_performance_grid", f"{safe_name}_grid.png")
+    ]
     
-    # Graphique 1 : Spider Radar
-    print("   [1/5] ⚽ Spider Radar (profil global)...", end=' ')
-    try:
-        analyzer.plot_spider_radar(
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_1_spider_radar.png")
-        )
-        print("✅")
-    except Exception as e:
-        print(f"❌ ({e})")
+    print(f"\n🎨 Génération des graphiques...\n")
     
-    # Graphique 2 : Détail d'une catégorie (Passing)
-    print("   [2/5] 🎯 Détail Passing (réel + normalisé)...", end=' ')
-    try:
-        analyzer.plot_category_details(
-            'Passing',
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_2_passing_detail.png")
-        )
-        print("✅")
-    except Exception as e:
-        print(f"❌ ({e})")
+    for i, graph_info in enumerate(graphs, 1):
+        print(f"   [{i}/5] {graph_info[0]:<25}...", end=' ')
+        try:
+            method = getattr(analyzer, graph_info[1])
+            method(save_path=os.path.join(TACTICAL_DIR, graph_info[2]))
+            print("✅")
+        except Exception as e:
+            print(f"❌ ({str(e)[:30]})")
     
-    # Graphique 3 : Comparaison des catégories
-    print("   [3/5] 📊 Comparaison catégories...", end=' ')
-    try:
-        analyzer.plot_all_categories_comparison(
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_3_categories.png")
-        )
-        print("✅")
-    except Exception as e:
-        print(f"❌ ({e})")
+    print_separator()
+    print("  ✅ ANALYSE TERMINÉE")
+    print_separator()
+    print(f"\n📁 Fichiers générés :")
+    print(f"   • CSV complet : {OUTPUT_DIR}/{player_name.replace(' ', '_')}_all_seasons.csv")
+    print(f"   • Graphiques  : {TACTICAL_DIR}/")
+    print(f"\n💡 {len(graphs)} visualisations créées pour {selected_season['season']} - {selected_season['competition']}")
+
+
+def compare_two_players():
+    """Mode comparaison de deux joueurs avec cache CSV"""
+    print_separator()
+    print("  🆚 MODE : COMPARAISON DE DEUX JOUEURS")
+    print_separator()
     
-    # Graphique 4 : Top 12 stats
-    print("   [4/5] 🏆 Top 12 statistiques...", end=' ')
-    try:
-        analyzer.plot_top_stats_absolute(
-            top_n=12,
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_4_top12.png")
-        )
-        print("✅")
-    except Exception as e:
-        print(f"❌ ({e})")
+    print("\n💡 INFORMATION : Vous pouvez comparer des joueurs sur des saisons différentes")
+    print("   Exemple : Verratti 2017-2018 Ligue 1 vs Vitinha 2023-2024 Ligue 1\n")
     
-    # Graphique 5 : Matrice de performance
-    print("   [5/5] 🔥 Matrice performance...", end=' ')
-    try:
-        analyzer.plot_performance_matrix(
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_5_matrix.png")
-        )
-        print("✅")
-    except Exception as e:
-        print(f"❌ ({e})")
+    OUTPUT_DIR = './fbref_analysis_output'
+    COMPARISON_DIR = './comparison_analysis'
     
-    # ========================================================================
-    # RÉSUMÉ FINAL
-    # ========================================================================
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(COMPARISON_DIR, exist_ok=True)
     
-    print_section("PIPELINE TERMINÉ AVEC SUCCÈS", "✅")
+    # Joueur 1
+    player1_name, player1_url = get_player_info(player_number=1)
     
-    print("📁 FICHIERS GÉNÉRÉS :\n")
+    # Joueur 2
+    player2_name, player2_url = get_player_info(player_number=2)
     
-    print("   📄 Données :")
-    print(f"      • {os.path.basename(raw_file)}")
-    print(f"      • {os.path.basename(clean_file)}")
+    players_data = []
     
-    print(f"\n   🎨 Visualisations Ballon d'Or ({TACTICAL_DIR}) :")
-    print(f"      • {safe_name}_1_spider_radar.png     ← Profil tactique global")
-    print(f"      • {safe_name}_2_passing_detail.png   ← Analyse Passing détaillée")
-    print(f"      • {safe_name}_3_categories.png       ← Comparaison des 5 catégories")
-    print(f"      • {safe_name}_4_top12.png            ← Top 12 statistiques")
-    print(f"      • {safe_name}_5_matrix.png           ← Matrice de performance")
+    # Charger ou scraper les deux joueurs
+    for i, (name, url) in enumerate([(player1_name, player1_url), (player2_name, player2_url)], 1):
+        print_separator()
+        print(f"  📥 CHARGEMENT JOUEUR {i} : {name.upper()}")
+        print_separator()
+        
+        df_all, metadata, available = load_or_scrape_player(name, url, OUTPUT_DIR)
+        
+        if df_all is None:
+            print(f"\n❌ Impossible de charger les données pour {name}")
+            return
+        
+        # Sélectionner la saison pour ce joueur
+        selected = select_season(available, name)
+        
+        players_data.append({
+            'name': name,
+            'df_all': df_all,
+            'metadata': metadata,
+            'selected_season': selected
+        })
     
-    print(f"\n{'='*80}")
-    print(f"  ⚽ 5 visualisations style Ballon d'Or (noir & or)")
-    print(f"  ⚽ Design élégant et professionnel")
-    print(f"  ⚽ Normalisation intelligente des échelles")
-    print(f"{'='*80}")
+    # Résumé de la comparaison
+    print_separator("=")
+    print("  📊 RÉSUMÉ DE LA COMPARAISON")
+    print_separator("=")
+    print(f"\n  🔵 Joueur 1 : {players_data[0]['name']}")
+    print(f"     • Saison      : {players_data[0]['selected_season']['season']}")
+    print(f"     • Compétition : {players_data[0]['selected_season']['competition']}")
+    print(f"     • Position    : {players_data[0]['metadata'].get('position', 'N/A')}")
     
-    print(f"\n💡 PROCHAINES ÉTAPES :")
-    print(f"   • Consulter les graphiques dans '{TACTICAL_DIR}'")
-    print(f"   • Analyser les forces et faiblesses du joueur")
-    print(f"   • Identifier les axes de progression")
-    print(f"   • Comparer avec d'autres profils d'élite")
+    print(f"\n  🔴 Joueur 2 : {players_data[1]['name']}")
+    print(f"     • Saison      : {players_data[1]['selected_season']['season']}")
+    print(f"     • Compétition : {players_data[1]['selected_season']['competition']}")
+    print(f"     • Position    : {players_data[1]['metadata'].get('position', 'N/A')}")
     
-    print(f"\n🏆 Analyse Ballon d'Or terminée pour {PLAYER_CONFIG['name']}\n")
+    # Vérifier les positions
+    pos1 = players_data[0]['metadata'].get('position', 'Unknown')
+    pos2 = players_data[1]['metadata'].get('position', 'Unknown')
+    
+    if pos1 != pos2:
+        print(f"\n⚠️  ATTENTION : Les positions sont différentes ({pos1} vs {pos2})")
+        print("   La comparaison reste possible mais peut être moins pertinente.")
+        cont = input("\n👉 Continuer la comparaison ? (o/n) : ").strip().lower()
+        if cont != 'o':
+            print("\n🚫 Comparaison annulée")
+            return
+    else:
+        print(f"\n✅ Les deux joueurs jouent au même poste ({pos1})")
+    
+    # Vérifier les saisons
+    if players_data[0]['selected_season']['season'] != players_data[1]['selected_season']['season']:
+        print(f"\n💡 Comparaison en différé : {players_data[0]['selected_season']['season']} vs {players_data[1]['selected_season']['season']}")
+    else:
+        print(f"\n💡 Comparaison sur la même saison : {players_data[0]['selected_season']['season']}")
+    
+    input("\n👉 Appuyez sur Entrée pour continuer...")
+    
+    # Nettoyage
+    print_separator()
+    print("  🧹 NETTOYAGE DES DONNÉES")
+    print_separator()
+    
+    cleaner = DataCleaner(verbose=False)
+    cleaned_data = []
+    
+    for i, player in enumerate(players_data, 1):
+        print(f"\n   [{i}/2] {player['name']}...", end=' ')
+        
+        df_selected = player['df_all'][
+            (player['df_all']['season'] == player['selected_season']['season']) &
+            (player['df_all']['competition'] == player['selected_season']['competition'])
+        ]
+        
+        metadata = player['metadata'].copy()
+        metadata['season'] = player['selected_season']['season']
+        metadata['competition'] = player['selected_season']['competition']
+        
+        df_clean = cleaner.clean(df_selected, metadata)
+        cleaned_data.append(df_clean)
+        
+        print(f"✅")
+    
+    # Comparaison
+    print_separator()
+    print("  🎨 GÉNÉRATION DES VISUALISATIONS DE COMPARAISON")
+    print_separator()
+    
+    # Créer le nom de comparaison avec les saisons
+    safe_name1 = f"{players_data[0]['name'].replace(' ', '_')}_{players_data[0]['selected_season']['season'].replace('-', '_')}"
+    safe_name2 = f"{players_data[1]['name'].replace(' ', '_')}_{players_data[1]['selected_season']['season'].replace('-', '_')}"
+    comparison_name = f"{safe_name1}_vs_{safe_name2}"
+    
+    comparator = PlayerComparator(
+        player1_name=f"{players_data[0]['name']} ({players_data[0]['selected_season']['season']})",
+        player2_name=f"{players_data[1]['name']} ({players_data[1]['selected_season']['season']})",
+        player1_data=cleaned_data[0],
+        player2_data=cleaned_data[1]
+    )
+    
+    print(f"\n🎨 Création des graphiques de comparaison...\n")
+    
+    comp_graphs = [
+        ("Spider Radar Superposé", "plot_comparison_spider", f"{comparison_name}_spider.png"),
+        ("Barres par Catégories", "plot_comparison_categories", f"{comparison_name}_categories.png"),
+        ("Heatmap Côte à Côte", "plot_comparison_heatmap", f"{comparison_name}_heatmap.png"),
+        ("Scatter Comparatif", "plot_comparison_scatter", f"{comparison_name}_scatter.png"),
+        ("Cartes Stats Clés", "plot_comparison_cards", f"{comparison_name}_cards.png")
+    ]
+    
+    for i, (name, method, filename) in enumerate(comp_graphs, 1):
+        print(f"   [{i}/5] {name:<30}...", end=' ')
+        try:
+            getattr(comparator, method)(save_path=os.path.join(COMPARISON_DIR, filename))
+            print("✅")
+        except Exception as e:
+            print(f"❌ ({str(e)[:30]})")
+    
+    print_separator()
+    print("  ✅ COMPARAISON TERMINÉE")
+    print_separator()
+    
+    print(f"\n📁 Fichiers générés :")
+    print(f"   • CSV Joueur 1 : {OUTPUT_DIR}/{players_data[0]['name'].replace(' ', '_')}_all_seasons.csv")
+    print(f"   • CSV Joueur 2 : {OUTPUT_DIR}/{players_data[1]['name'].replace(' ', '_')}_all_seasons.csv")
+    print(f"   • Graphiques   : {COMPARISON_DIR}/")
+    
+    print(f"\n💡 Comparaison créée :")
+    print(f"   🔵 {players_data[0]['name']} ({players_data[0]['selected_season']['season']} - {players_data[0]['selected_season']['competition']})")
+    print(f"   🆚")
+    print(f"   🔴 {players_data[1]['name']} ({players_data[1]['selected_season']['season']} - {players_data[1]['selected_season']['competition']})")
+
+
+def main():
+    """Point d'entrée principal"""
+    print_banner()
+    
+    choice = get_user_choice()
+    
+    if choice == 1:
+        analyze_single_player()
+    else:
+        compare_two_players()
+    
+    print_separator("=")
+    print("  🏆 ANALYSE TERMINÉE AVEC SUCCÈS")
+    print_separator("=")
+    print("\n👋 Merci d'avoir utilisé FBref Analyzer !\n")
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n⚠️  Pipeline interrompu par l'utilisateur")
+        print("\n\n⚠️  Analyse interrompue par l'utilisateur")
         print("👋 Au revoir\n")
     except Exception as e:
         print(f"\n\n❌ ERREUR FATALE : {e}")
         import traceback
         traceback.print_exc()
-        print("\n💡 Vérifiez la configuration et les dépendances")
+        print("\n💡 Veuillez vérifier votre configuration")
     finally:
         print()
