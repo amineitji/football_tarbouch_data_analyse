@@ -12,10 +12,11 @@ Brotli==1.1.0
 brotlicffi @ file:///croot/brotlicffi_1736182461069/work
 bs4==0.0.2
 cachetools==6.2.0
-certifi @ file:///croot/certifi_1754570635119/work/certifi
+certifi==2025.10.5
 cffi @ file:///croot/cffi_1736182485317/work
 charset-normalizer==3.4.3
 click==8.3.0
+cloudscraper==1.2.71
 colorama @ file:///work/perseverance-python-buildout/croot/colorama_1728388434940/work
 conda @ file:///croot/conda_1754469510968/work/conda-src
 conda-anaconda-telemetry @ file:///croot/conda-anaconda-telemetry_1755883788794/work
@@ -36,6 +37,7 @@ frozendict @ file:///work/perseverance-python-buildout/croot/frozendict_17284975
 gitdb==4.0.12
 GitPython==3.1.45
 gunicorn==21.2.0
+h11==0.16.0
 idna==3.10
 itsdangerous==2.2.0
 jaraco.classes @ file:///croot/jaraco.classes_1755516327832/work
@@ -58,6 +60,7 @@ menuinst @ file:///croot/menuinst_1753464582829/work
 more-itertools @ file:///work/perseverance-python-buildout/croot/more-itertools_1728388668839/work
 narwhals==2.6.0
 numpy==2.3.3
+outcome==1.3.0.post0
 packaging @ file:///croot/packaging_1753775359799/work
 pandas==2.3.3
 pillow==11.3.0
@@ -85,17 +88,21 @@ pytz==2025.2
 readchar @ file:///work/perseverance-python-buildout/croot/readchar_1728397613245/work
 referencing==0.36.2
 requests==2.32.5
+requests-toolbelt==1.0.0
 rich @ file:///croot/rich_1732638981168/work
 rpds-py==0.27.1
 ruamel.yaml @ file:///croot/ruamel.yaml_1745960305322/work
 ruamel.yaml.clib @ file:///croot/ruamel.yaml.clib_1745937152469/work
 scipy==1.16.2
 SecretStorage @ file:///work/perseverance-python-buildout/croot/secretstorage_1728387678881/work
+selenium==4.37.0
 semver @ file:///croot/semver_1736540782504/work
 setuptools==78.1.1
 shellingham @ file:///work/perseverance-python-buildout/croot/shellingham_1728395303315/work
 six==1.17.0
 smmap==5.0.2
+sniffio==1.3.1
+sortedcontainers==2.4.0
 soupsieve==2.8
 spicy==0.16.0
 streamlit==1.50.0
@@ -106,6 +113,8 @@ toml==0.10.2
 tomli @ file:///croot/tomli_1753774587605/work
 tornado==6.5.2
 tqdm @ file:///croot/tqdm_1738943501192/work
+trio==0.31.0
+trio-websocket==0.12.2
 truststore @ file:///croot/truststore_1753907171582/work
 typer @ file:///work/perseverance-python-buildout/croot/typer_1728397851651/work
 typing-inspection @ file:///croot/typing-inspection_1746023470701/work
@@ -115,7 +124,9 @@ urllib3 @ file:///croot/urllib3_1750775463400/work
 watchdog==6.0.0
 weasyprint==66.0
 webencodings==0.5.1
+websocket-client==1.9.0
 Werkzeug==3.1.3
 wheel==0.45.1
+wsproto==1.2.0
 zopfli==0.2.3.post1
 zstandard @ file:///croot/zstandard_1731356346222/work
