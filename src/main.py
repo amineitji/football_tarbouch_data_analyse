@@ -1,6 +1,6 @@
 """
-Main V4 - Pipeline avec visualisations professionnelles
-Design moderne, échelles réalistes, lisibilité optimale
+Main V6 - Pipeline avec visualisations style Ballon d'Or
+Design noir et or élégant
 """
 
 import os
@@ -11,13 +11,13 @@ from player_analyzer import PlayerAnalyzer
 
 
 def print_banner():
-    """Bannière stylée"""
+    """Bannière style Ballon d'Or"""
     banner = """
     ╔═══════════════════════════════════════════════════════════════════════════╗
     ║                                                                           ║
-    ║             🔥 FBREF TACTICAL ANALYZER V4 🔥                              ║
+    ║             ⚽ FBREF TACTICAL ANALYZER - BALLON D'OR EDITION ⚽           ║
     ║                                                                           ║
-    ║         Analyse tactique professionnelle avec visualisations modernes    ║
+    ║                    Design Noir & Or - Analyse d'Élite                    ║
     ║                                                                           ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
     """
@@ -32,7 +32,7 @@ def print_section(title: str, emoji: str = ""):
 
 
 def main():
-    """Pipeline complet avec 5 visualisations professionnelles"""
+    """Pipeline complet avec 5 visualisations Ballon d'Or"""
     
     print_banner()
     
@@ -66,12 +66,12 @@ def main():
     print(f"   Graphiques  : {TACTICAL_DIR}")
     print(f"   Timestamp   : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    print(f"\n✨ VISUALISATIONS GÉNÉRÉES (5 graphiques professionnels) :")
-    print(f"   1️⃣  Spider Radar       → Profil tactique global (échelles réelles)")
-    print(f"   2️⃣  Barres Catégories  → Comparaison des 5 aspects du jeu")
-    print(f"   3️⃣  Top 12 Stats       → Meilleures performances individuelles")
-    print(f"   4️⃣  Passing Polaire    → Analyse détaillée du passing (échelle réelle)")
-    print(f"   5️⃣  Heatmap Tactique   → Vue d'ensemble matricielle")
+    print(f"\n✨ VISUALISATIONS BALLON D'OR (5 graphiques élégants) :")
+    print(f"   1️⃣  Spider Radar        → Profil tactique global normalisé")
+    print(f"   2️⃣  Détail Catégorie    → Analyse approfondie d'une catégorie")
+    print(f"   3️⃣  Comparaison Globale → Vue d'ensemble des 5 catégories")
+    print(f"   4️⃣  Top 12 Stats        → Meilleures performances absolues")
+    print(f"   5️⃣  Matrice Performance → Heatmap tactique complète")
     
     # ========================================================================
     # ÉTAPE 1 : SCRAPING
@@ -151,7 +151,7 @@ def main():
         print(f"   ... et {len(df_clean.select_dtypes(include=['number']).columns) - 8} autres stats")
     
     # ========================================================================
-    # ÉTAPE 3 : VISUALISATIONS
+    # ÉTAPE 3 : VISUALISATIONS BALLON D'OR
     # ========================================================================
     
     print_section("ÉTAPE 3/3 : GÉNÉRATION DES VISUALISATIONS", "🎨")
@@ -166,13 +166,13 @@ def main():
     # Afficher le résumé tactique
     analyzer.print_tactical_summary()
     
-    print(f"\n🎨 GÉNÉRATION DES GRAPHIQUES...")
+    print(f"\n🎨 GÉNÉRATION DES GRAPHIQUES BALLON D'OR...")
     print(f"   Destination : {TACTICAL_DIR}\n")
     
     safe_name = PLAYER_CONFIG['name'].replace(' ', '_')
     
     # Graphique 1 : Spider Radar
-    print("   [1/5] 🕸️  Spider Radar (profil global)...", end=' ')
+    print("   [1/5] ⚽ Spider Radar (profil global)...", end=' ')
     try:
         analyzer.plot_spider_radar(
             save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_1_spider_radar.png")
@@ -181,42 +181,43 @@ def main():
     except Exception as e:
         print(f"❌ ({e})")
     
-    # Graphique 2 : Barres catégories
-    print("   [2/5] 📊 Barres horizontales (catégories)...", end=' ')
+    # Graphique 2 : Détail d'une catégorie (Passing)
+    print("   [2/5] 🎯 Détail Passing (réel + normalisé)...", end=' ')
     try:
-        analyzer.plot_category_bars(
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_2_categories_bars.png")
+        analyzer.plot_category_details(
+            'Passing',
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_2_passing_detail.png")
         )
         print("✅")
     except Exception as e:
         print(f"❌ ({e})")
     
-    # Graphique 3 : Top 12 stats
-    print("   [3/5] 🏆 Top 12 statistiques...", end=' ')
+    # Graphique 3 : Comparaison des catégories
+    print("   [3/5] 📊 Comparaison catégories...", end=' ')
     try:
-        analyzer.plot_top_stats(
+        analyzer.plot_all_categories_comparison(
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_3_categories.png")
+        )
+        print("✅")
+    except Exception as e:
+        print(f"❌ ({e})")
+    
+    # Graphique 4 : Top 12 stats
+    print("   [4/5] 🏆 Top 12 statistiques...", end=' ')
+    try:
+        analyzer.plot_top_stats_absolute(
             top_n=12,
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_3_top12_stats.png")
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_4_top12.png")
         )
         print("✅")
     except Exception as e:
         print(f"❌ ({e})")
     
-    # Graphique 4 : Passing polaire
-    print("   [4/5] ⚽ Passing détaillé (polaire)...", end=' ')
+    # Graphique 5 : Matrice de performance
+    print("   [5/5] 🔥 Matrice performance...", end=' ')
     try:
-        analyzer.plot_passing_polar(
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_4_passing_polar.png")
-        )
-        print("✅")
-    except Exception as e:
-        print(f"❌ ({e})")
-    
-    # Graphique 5 : Heatmap
-    print("   [5/5] 🔥 Heatmap tactique...", end=' ')
-    try:
-        analyzer.plot_heatmap_categories(
-            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_5_heatmap.png")
+        analyzer.plot_performance_matrix(
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_5_matrix.png")
         )
         print("✅")
     except Exception as e:
@@ -234,25 +235,26 @@ def main():
     print(f"      • {os.path.basename(raw_file)}")
     print(f"      • {os.path.basename(clean_file)}")
     
-    print(f"\n   🎨 Visualisations ({TACTICAL_DIR}) :")
-    print(f"      • {safe_name}_1_spider_radar.png      ← Profil tactique global")
-    print(f"      • {safe_name}_2_categories_bars.png   ← Comparaison par catégorie")
-    print(f"      • {safe_name}_3_top12_stats.png       ← Meilleures performances")
-    print(f"      • {safe_name}_4_passing_polar.png     ← Focus sur le passing")
-    print(f"      • {safe_name}_5_heatmap.png           ← Vue d'ensemble matricielle")
+    print(f"\n   🎨 Visualisations Ballon d'Or ({TACTICAL_DIR}) :")
+    print(f"      • {safe_name}_1_spider_radar.png     ← Profil tactique global")
+    print(f"      • {safe_name}_2_passing_detail.png   ← Analyse Passing détaillée")
+    print(f"      • {safe_name}_3_categories.png       ← Comparaison des 5 catégories")
+    print(f"      • {safe_name}_4_top12.png            ← Top 12 statistiques")
+    print(f"      • {safe_name}_5_matrix.png           ← Matrice de performance")
     
     print(f"\n{'='*80}")
-    print(f"  ✨ 5 visualisations professionnelles avec échelles réalistes")
-    print(f"  ✨ Design moderne et lisibilité optimale")
-    print(f"  ✨ Analyse tactique complète en un coup d'œil")
+    print(f"  ⚽ 5 visualisations style Ballon d'Or (noir & or)")
+    print(f"  ⚽ Design élégant et professionnel")
+    print(f"  ⚽ Normalisation intelligente des échelles")
     print(f"{'='*80}")
     
     print(f"\n💡 PROCHAINES ÉTAPES :")
     print(f"   • Consulter les graphiques dans '{TACTICAL_DIR}'")
     print(f"   • Analyser les forces et faiblesses du joueur")
-    print(f"   • Comparer avec d'autres profils similaires")
+    print(f"   • Identifier les axes de progression")
+    print(f"   • Comparer avec d'autres profils d'élite")
     
-    print(f"\n👋 Analyse terminée pour {PLAYER_CONFIG['name']}\n")
+    print(f"\n🏆 Analyse Ballon d'Or terminée pour {PLAYER_CONFIG['name']}\n")
 
 
 if __name__ == "__main__":
