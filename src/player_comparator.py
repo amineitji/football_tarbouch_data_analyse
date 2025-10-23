@@ -1,6 +1,5 @@
 """
-PlayerComparator V3 - Style avec dégradé blanc vers couleur pastel
-Design inspiré de l'exemple fourni
+PlayerComparator V4 - Style avec dégradé + infos contextuelles enrichies
 """
 
 import pandas as pd
@@ -16,12 +15,12 @@ class PlayerComparator:
     """Compare deux joueurs avec style dégradé blanc-pastel"""
     
     COLORS = {
-        'gradient_start': "#000000",  # Blanc
-        'gradient_end': '#646327',    # Violet pastel
-        'player1': '#FF0000',         # Rouge pour joueur 1
-        'player2': '#0000FF',         # Bleu pour joueur 2
-        'text': '#FFFFFF',            # Blanc pour le texte
-        'edge': '#000000'             # Noir pour les contours
+        'gradient_start': "#000000",
+        'gradient_end': '#646327',
+        'player1': '#FF0000',
+        'player2': '#0000FF',
+        'text': '#FFFFFF',
+        'edge': '#000000'
     }
     
     def __init__(self, player1_name: str, player2_name: str,
@@ -37,7 +36,7 @@ class PlayerComparator:
         self.analyzer2.load_data(player2_data)
     
     def _create_gradient_background(self, fig):
-        """Crée un fond en dégradé vertical (blanc en haut, pastel en bas)"""
+        """Crée un fond en dégradé vertical"""
         gradient = np.linspace(0, 1, 256).reshape(-1, 1)
         gradient = np.hstack((gradient, gradient))
         
@@ -54,14 +53,35 @@ class PlayerComparator:
             spine.set_edgecolor('white')
             spine.set_linewidth(2.5)
     
-    def _add_watermark(self, ax):
-        """Ajoute le watermark @TarbouchData"""
-        ax.text(0.5, 0.75, '@TarbouchData', 
-                fontsize=14, color='white', fontweight='bold', 
-                ha='left', transform=ax.transAxes, alpha=0.8)
+    def _add_watermark(self, fig):
+        """Ajoute le watermark @TarbouchData en grand"""
+        fig.text(0.98, 0.02, '@TarbouchData', 
+                fontsize=20, color='white', fontweight='bold', 
+                ha='right', va='bottom', alpha=1.0,
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='black', 
+                         edgecolor='white', linewidth=2, alpha=0.8))
+    
+    def _add_comparison_context(self, fig):
+        """Ajoute le contexte de comparaison"""
+        context1 = f"{self.analyzer1.position}"
+        if self.analyzer1.season:
+            context1 += f" | {self.analyzer1.season}"
+        if self.analyzer1.competition:
+            context1 += f" | {self.analyzer1.competition}"
+        
+        context2 = f"{self.analyzer2.position}"
+        if self.analyzer2.season:
+            context2 += f" | {self.analyzer2.season}"
+        if self.analyzer2.competition:
+            context2 += f" | {self.analyzer2.competition}"
+        
+        fig.text(0.02, 0.06, f"🔴 {self.player1_name}: {context1}", 
+                fontsize=11, color='white', ha='left', va='bottom', alpha=0.9)
+        fig.text(0.02, 0.02, f"🔵 {self.player2_name}: {context2}", 
+                fontsize=11, color='white', ha='left', va='bottom', alpha=0.9)
     
     def plot_comparison_spider(self, save_path: str = None):
-        """Spider radar superposé avec dégradé"""
+        """Spider radar superposé avec explications"""
         categories = list(self.analyzer1.CATEGORIES.keys())
         
         values1 = [self.analyzer1._get_category_average_normalized(cat) for cat in categories]
@@ -103,16 +123,24 @@ class PlayerComparator:
         ax.spines['polar'].set_linewidth(2.5)
         
         # Titre
-        plt.title(f'COMPARAISON\n{self.player1_name} VS {self.player2_name}', 
-                 size=25, fontweight='bold', pad=50, color='white')
+        plt.title(f'COMPARAISON RADAR\n{self.player1_name} VS {self.player2_name}', 
+                 size=28, fontweight='bold', pad=60, color='white')
         
-        # Légende
-        legend = plt.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), 
-                           fontsize=14, facecolor='none', edgecolor='white',
-                           framealpha=0.5)
+        # Explication
+        explanation = "Scores normalisés par catégorie (0-100) | Plus la zone est grande, meilleur est le joueur"
+        fig.text(0.5, 0.92, explanation, 
+                ha='center', va='top', fontsize=11, color='white', 
+                style='italic', alpha=0.9)
         
-        # Watermark
-        self._add_watermark(ax)
+        # Légende améliorée
+        legend = plt.legend(loc='upper right', bbox_to_anchor=(1.3, 1.12), 
+                           fontsize=16, facecolor='black', edgecolor='white',
+                           framealpha=0.8, labelcolor='white')
+        legend.get_frame().set_linewidth(2.5)
+        
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_comparison_context(fig)
         
         plt.tight_layout()
         
@@ -121,7 +149,7 @@ class PlayerComparator:
         plt.close()
     
     def plot_comparison_categories(self, save_path: str = None):
-        """Barres groupées avec dégradé"""
+        """Barres groupées avec légendes"""
         categories = list(self.analyzer1.CATEGORIES.keys())
         
         values1 = [self.analyzer1._get_category_average_normalized(cat) for cat in categories]
@@ -153,29 +181,35 @@ class PlayerComparator:
         
         # Style
         ax.set_xlabel('CATÉGORIES', size=16, fontweight='bold', color='white')
-        ax.set_ylabel('SCORE (0-100)', size=16, fontweight='bold', color='white')
+        ax.set_ylabel('SCORE NORMALISÉ (0-100)', size=16, fontweight='bold', color='white')
         ax.set_xticks(x)
         ax.set_xticklabels(categories, size=14, fontweight='bold', color='white')
         ax.set_ylim(0, 115)
         
         ax.tick_params(axis='both', colors='white', labelsize=14)
         
-        # Lignes de référence
-        ax.axhline(50, color='white', linestyle='--', linewidth=2, alpha=0.5)
-        ax.axhline(70, color='white', linestyle='--', linewidth=2, alpha=0.5)
+        # Lignes de référence avec labels
+        ax.axhline(50, color='white', linestyle='--', linewidth=2, alpha=0.6)
+        ax.axhline(70, color='white', linestyle='--', linewidth=2, alpha=0.6)
+        
+        ax.text(len(categories)-0.5, 52, 'Seuil 50', 
+               ha='right', fontsize=10, color='white', fontweight='bold', alpha=0.8)
+        ax.text(len(categories)-0.5, 72, 'Seuil 70 (Élite)', 
+               ha='right', fontsize=10, color='white', fontweight='bold', alpha=0.8)
         
         self._customize_axes(ax)
         
         # Légende
-        ax.legend(fontsize=14, facecolor='none', edgecolor='white',
-                 loc='upper left', framealpha=0.5)
+        ax.legend(fontsize=16, facecolor='black', edgecolor='white',
+                 loc='upper left', framealpha=0.8, labelcolor='white')
         
         # Titre
         plt.title(f'COMPARAISON PAR CATÉGORIE\n{self.player1_name} VS {self.player2_name}', 
                  size=25, fontweight='bold', pad=20, color='white')
         
-        # Watermark
-        self._add_watermark(ax)
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_comparison_context(fig)
         
         plt.tight_layout()
         
@@ -184,10 +218,9 @@ class PlayerComparator:
         plt.close()
     
     def plot_comparison_heatmap(self, save_path: str = None):
-        """Heatmap côte à côte avec dégradé"""
+        """Heatmap côte à côte avec explications"""
         categories = list(self.analyzer1.CATEGORIES.keys())
         
-        # Préparer les matrices
         matrix1 = []
         matrix2 = []
         stat_labels = []
@@ -204,13 +237,12 @@ class PlayerComparator:
         fig = plt.figure(figsize=(16, 9))
         self._create_gradient_background(fig)
         
-        # Créer grille
         from matplotlib.gridspec import GridSpec
         gs = GridSpec(1, 2, figure=fig, width_ratios=[1, 1], wspace=0.1)
         ax1 = fig.add_subplot(gs[0], facecolor='none')
         ax2 = fig.add_subplot(gs[1], facecolor='none')
         
-        # Colormap rouge et bleue
+        # Colormaps
         cmap1 = LinearSegmentedColormap.from_list('custom1',
             ['white', self.COLORS['player1']], N=256)
         cmap2 = LinearSegmentedColormap.from_list('custom2',
@@ -224,7 +256,6 @@ class PlayerComparator:
         ax1.set_xticklabels([self.player1_name], size=16, fontweight='bold', 
                            color='white')
         
-        # Annotations Joueur 1
         for i, val in enumerate(matrix1):
             color = 'white' if val[0] > 50 else 'black'
             ax1.text(0, i, f'{val[0]:.0f}', ha='center', va='center',
@@ -240,7 +271,6 @@ class PlayerComparator:
         ax2.set_xticklabels([self.player2_name], size=16, fontweight='bold', 
                            color='white')
         
-        # Annotations Joueur 2
         for i, val in enumerate(matrix2):
             color = 'white' if val[0] > 50 else 'black'
             ax2.text(0, i, f'{val[0]:.0f}', ha='center', va='center',
@@ -252,10 +282,14 @@ class PlayerComparator:
         plt.suptitle(f'HEATMAP DÉTAILLÉE\n{self.player1_name} VS {self.player2_name}', 
                     size=25, fontweight='bold', color='white', y=0.96)
         
-        # Watermark
-        fig.text(0.5, 0.02, '@TarbouchData', 
-                ha='left', va='bottom', fontsize=14, 
-                color='white', fontweight='bold', alpha=0.8)
+        # Explication
+        fig.text(0.5, 0.91, "Chaque ligne = 1 statistique spécifique | Plus c'est foncé, meilleur est le score", 
+                ha='center', va='top', fontsize=10, color='white', 
+                style='italic', alpha=0.9)
+        
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_comparison_context(fig)
         
         plt.tight_layout()
         
@@ -264,7 +298,7 @@ class PlayerComparator:
         plt.close()
     
     def plot_comparison_scatter(self, save_path: str = None):
-        """Scatter plot comparatif - Passes vs Possessions progressives"""
+        """Scatter plot comparatif avec contexte"""
         prog_passes1 = self.analyzer1._get_stat_value('Progressive Passes')
         prog_carries1 = self.analyzer1._get_stat_value('Progressive Carries')
         
@@ -277,22 +311,26 @@ class PlayerComparator:
         ax = fig.add_subplot(111, facecolor='none')
         
         # Points des joueurs
-        ax.scatter(prog_passes1, prog_carries1, s=200, color=self.COLORS['player1'], 
-                  edgecolor=self.COLORS['edge'], linewidth=2, zorder=5,
+        ax.scatter(prog_passes1, prog_carries1, s=300, color=self.COLORS['player1'], 
+                  edgecolor=self.COLORS['edge'], linewidth=3, zorder=5,
                   label=self.player1_name)
         
-        ax.scatter(prog_passes2, prog_carries2, s=200, color=self.COLORS['player2'], 
-                  edgecolor=self.COLORS['edge'], linewidth=2, zorder=5,
+        ax.scatter(prog_passes2, prog_carries2, s=300, color=self.COLORS['player2'], 
+                  edgecolor=self.COLORS['edge'], linewidth=3, zorder=5,
                   marker='s', label=self.player2_name)
         
-        # Labels des joueurs
-        ax.text(prog_passes1 + 0.2, prog_carries1 + 0.1, self.player1_name, 
-               ha='right', va='bottom', fontsize=12, fontweight='bold',
-               color='white', zorder=6)
+        # Labels des joueurs avec box
+        ax.text(prog_passes1 + 0.3, prog_carries1 + 0.2, self.player1_name, 
+               ha='right', va='bottom', fontsize=13, fontweight='bold',
+               color='white', zorder=6,
+               bbox=dict(boxstyle='round,pad=0.4', facecolor='black',
+                        edgecolor=self.COLORS['player1'], linewidth=2, alpha=0.8))
         
-        ax.text(prog_passes2 + 0.2, prog_carries2 + 0.1, self.player2_name, 
-               ha='right', va='bottom', fontsize=12, fontweight='bold',
-               color='white', zorder=6)
+        ax.text(prog_passes2 + 0.3, prog_carries2 + 0.2, self.player2_name, 
+               ha='right', va='bottom', fontsize=13, fontweight='bold',
+               color='white', zorder=6,
+               bbox=dict(boxstyle='round,pad=0.4', facecolor='black',
+                        edgecolor=self.COLORS['player2'], linewidth=2, alpha=0.8))
         
         # Limites
         all_x = [prog_passes1, prog_passes2]
@@ -316,15 +354,23 @@ class PlayerComparator:
         ax.set_yticks(np.arange(y_min, y_max + 1, 1))
         
         # Légende
-        ax.legend(fontsize=14, facecolor='none', edgecolor='white',
-                 loc='upper left', framealpha=0.5)
+        legend = ax.legend(fontsize=16, facecolor='black', edgecolor='white',
+                          loc='upper left', framealpha=0.8, labelcolor='white')
+        legend.get_frame().set_linewidth(2)
         
         # Titre
         plt.title('COMPARAISON\nPasses et Possessions Progressives', 
                  fontsize=25, color='white', fontweight='bold', pad=20)
         
-        # Watermark
-        self._add_watermark(ax)
+        # Explication
+        explanation = "Position sur le graphique = influence offensive | En haut à droite = meilleur contributeur"
+        fig.text(0.5, 0.92, explanation, 
+                ha='center', va='top', fontsize=10, color='white', 
+                style='italic', alpha=0.9)
+        
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_comparison_context(fig)
         
         plt.tight_layout()
         
@@ -333,7 +379,7 @@ class PlayerComparator:
         plt.close()
     
     def plot_comparison_cards(self, save_path: str = None):
-        """Cartes de comparaison directe côte à côte"""
+        """Cartes de comparaison côte à côte avec contexte"""
         key_stats = [
             ('Goals', 'BUTS'),
             ('Assists', 'PASSES D.'),
@@ -346,10 +392,14 @@ class PlayerComparator:
         fig = plt.figure(figsize=(16, 9))
         self._create_gradient_background(fig)
         
-        # Grille 3x4 (6 stats × 2 joueurs)
+        # Grille 3x4
         for i, (stat_key, stat_label) in enumerate(key_stats):
             val1 = self.analyzer1._get_stat_value(stat_key)
             val2 = self.analyzer2._get_stat_value(stat_key)
+            
+            # Déterminer le gagnant
+            winner_color1 = self.COLORS['player1'] if val1 > val2 else 'white'
+            winner_color2 = self.COLORS['player2'] if val2 > val1 else 'white'
             
             # Joueur 1 (gauche)
             ax1 = plt.subplot(3, 4, i*2+1, facecolor='none')
@@ -362,6 +412,10 @@ class PlayerComparator:
                     ha='center', va='center', fontsize=14, fontweight='bold',
                     color='white')
             
+            ax1.text(0.5, 0.15, 'par 90\'', 
+                    ha='center', va='center', fontsize=10, style='italic',
+                    color='white', alpha=0.7)
+            
             if i == 0:
                 ax1.text(0.5, 0.9, self.player1_name, 
                         ha='center', va='center', fontsize=14, fontweight='bold',
@@ -371,8 +425,8 @@ class PlayerComparator:
             ax1.set_ylim(0, 1)
             ax1.axis('off')
             
-            rect = mpatches.Rectangle((0, 0), 1, 1, linewidth=2.5, 
-                                     edgecolor='white', facecolor='none', 
+            rect = mpatches.Rectangle((0, 0), 1, 1, linewidth=3, 
+                                     edgecolor=winner_color1, facecolor='none', 
                                      transform=ax1.transAxes)
             ax1.add_patch(rect)
             
@@ -387,6 +441,10 @@ class PlayerComparator:
                     ha='center', va='center', fontsize=14, fontweight='bold',
                     color='white')
             
+            ax2.text(0.5, 0.15, 'par 90\'', 
+                    ha='center', va='center', fontsize=10, style='italic',
+                    color='white', alpha=0.7)
+            
             if i == 0:
                 ax2.text(0.5, 0.9, self.player2_name, 
                         ha='center', va='center', fontsize=14, fontweight='bold',
@@ -396,8 +454,8 @@ class PlayerComparator:
             ax2.set_ylim(0, 1)
             ax2.axis('off')
             
-            rect = mpatches.Rectangle((0, 0), 1, 1, linewidth=2.5, 
-                                     edgecolor='white', facecolor='none', 
+            rect = mpatches.Rectangle((0, 0), 1, 1, linewidth=3, 
+                                     edgecolor=winner_color2, facecolor='none', 
                                      transform=ax2.transAxes)
             ax2.add_patch(rect)
         
@@ -405,10 +463,15 @@ class PlayerComparator:
         fig.suptitle(f'COMPARAISON STATS CLÉS\n{self.player1_name} VS {self.player2_name}', 
                     fontsize=25, fontweight='bold', color='white', y=0.98)
         
-        # Watermark
-        fig.text(0.5, 0.02, '@TarbouchData', 
-                ha='left', va='bottom', fontsize=14, 
-                color='white', fontweight='bold', alpha=0.8)
+        # Légende bordures colorées
+        legend_text = "Bordure colorée = meilleur dans cette statistique"
+        fig.text(0.5, 0.91, legend_text, 
+                ha='center', va='top', fontsize=11, color='white', 
+                style='italic', alpha=0.9)
+        
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_comparison_context(fig)
         
         plt.tight_layout()
         

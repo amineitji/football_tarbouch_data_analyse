@@ -1,6 +1,5 @@
 """
-PlayerAnalyzer V8 - Style avec dégradé blanc vers couleur pastel
-Design inspiré de l'exemple fourni
+PlayerAnalyzer V9 - Style avec dégradé + infos contextuelles enrichies
 """
 
 import pandas as pd
@@ -43,13 +42,12 @@ class PlayerAnalyzer:
         }
     }
     
-    # Couleurs style dégradé pastel
     COLORS = {
-        'gradient_start': "#000000",  # Blanc
-        'gradient_end': "#96943C",    # Violet pastel
-        'points': '#FF0000',          # Rouge pour les points
-        'text': '#FFFFFF',            # Blanc pour le texte
-        'edge': '#000000'             # Noir pour les contours
+        'gradient_start': "#000000",
+        'gradient_end': "#646327",
+        'points': '#FF0000',
+        'text': '#FFFFFF',
+        'edge': '#000000'
     }
     
     def __init__(self, player_name: str, position: str):
@@ -57,6 +55,8 @@ class PlayerAnalyzer:
         self.position = position
         self.df = None
         self.stats = {}
+        self.season = None
+        self.competition = None
         
     def load_data(self, df: pd.DataFrame):
         """Charge les données"""
@@ -66,9 +66,15 @@ class PlayerAnalyzer:
                 self.stats[col] = float(df[col].iloc[0])
             except:
                 self.stats[col] = df[col].iloc[0]
+        
+        # Extraire saison et compétition
+        if 'season' in df.columns:
+            self.season = df['season'].iloc[0]
+        if 'competition' in df.columns:
+            self.competition = df['competition'].iloc[0]
     
     def _create_gradient_background(self, fig):
-        """Crée un fond en dégradé vertical (blanc en haut, pastel en bas)"""
+        """Crée un fond en dégradé vertical"""
         gradient = np.linspace(0, 1, 256).reshape(-1, 1)
         gradient = np.hstack((gradient, gradient))
         
@@ -85,11 +91,25 @@ class PlayerAnalyzer:
             spine.set_edgecolor('white')
             spine.set_linewidth(2.5)
     
-    def _add_watermark(self, ax):
-        """Ajoute le watermark @TarbouchData"""
-        ax.text(0.5, 0.75, '@TarbouchData', 
-                fontsize=14, color='white', fontweight='bold', 
-                ha='left', transform=ax.transAxes, alpha=0.8)
+    def _add_watermark(self, fig):
+        """Ajoute le watermark @TarbouchData en grand et visible"""
+        fig.text(0.98, 0.02, '@TarbouchData', 
+                fontsize=20, color='white', fontweight='bold', 
+                ha='right', va='bottom', alpha=1.0,
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='black', 
+                         edgecolor='white', linewidth=2, alpha=0.8))
+    
+    def _add_context_info(self, fig):
+        """Ajoute les infos de contexte (saison, compétition, position)"""
+        context_text = f"Position: {self.position}"
+        if self.season:
+            context_text += f" | Saison: {self.season}"
+        if self.competition:
+            context_text += f" | {self.competition}"
+        
+        fig.text(0.02, 0.02, context_text, 
+                fontsize=12, color='white', fontweight='normal', 
+                ha='left', va='bottom', alpha=0.9)
     
     def _get_stat_value(self, stat_name: str) -> float:
         """Récupère la valeur d'une stat"""
@@ -133,7 +153,7 @@ class PlayerAnalyzer:
         return np.mean(normalized_values)
     
     def plot_spider_radar(self, save_path: Optional[str] = None):
-        """Spider radar style dégradé"""
+        """Spider radar avec explications"""
         categories = list(self.CATEGORIES.keys())
         values_normalized = [self._get_category_average_normalized(cat) for cat in categories]
         
@@ -164,7 +184,7 @@ class PlayerAnalyzer:
         ax.spines['polar'].set_color('white')
         ax.spines['polar'].set_linewidth(2.5)
         
-        # Valeurs
+        # Valeurs sur les points
         for angle, value in zip(angles[:-1], values_normalized[:-1]):
             ax.text(angle, value + 10, f'{value:.0f}', 
                    ha='center', va='center', size=14, fontweight='bold',
@@ -172,10 +192,23 @@ class PlayerAnalyzer:
         
         # Titre
         plt.title(f'{self.player_name}\nPROFIL TACTIQUE', 
-                 size=25, fontweight='bold', pad=40, color='white')
+                 size=28, fontweight='bold', pad=50, color='white')
         
-        # Watermark
-        self._add_watermark(ax)
+        # Explication
+        explanation = "Scores normalisés par catégorie (0-100)\nChaque catégorie regroupe 5 statistiques clés"
+        fig.text(0.5, 0.92, explanation, 
+                ha='center', va='top', fontsize=11, color='white', 
+                style='italic', alpha=0.9)
+        
+        # Légende des seuils
+        legend_text = "🔴 <50: À améliorer  |  🟡 50-70: Bon niveau  |  🟢 >70: Élite"
+        fig.text(0.5, 0.08, legend_text, 
+                ha='center', va='bottom', fontsize=12, color='white', 
+                fontweight='bold', alpha=0.9)
+        
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_context_info(fig)
         
         plt.tight_layout()
         
@@ -184,7 +217,7 @@ class PlayerAnalyzer:
         plt.close()
     
     def plot_scatter_progressive(self, save_path: Optional[str] = None):
-        """Scatter plot - Passes vs Possessions progressives"""
+        """Scatter plot avec contexte"""
         prog_passes = self._get_stat_value('Progressive Passes')
         prog_carries = self._get_stat_value('Progressive Carries')
         
@@ -194,13 +227,15 @@ class PlayerAnalyzer:
         ax = fig.add_subplot(111, facecolor='none')
         
         # Point du joueur
-        ax.scatter(prog_passes, prog_carries, s=200, color=self.COLORS['points'], 
-                  edgecolor=self.COLORS['edge'], linewidth=2, zorder=5)
+        ax.scatter(prog_passes, prog_carries, s=300, color=self.COLORS['points'], 
+                  edgecolor=self.COLORS['edge'], linewidth=3, zorder=5)
         
         # Label
-        ax.text(prog_passes + 0.2, prog_carries + 0.1, self.player_name, 
-               ha='right', va='bottom', fontsize=12, fontweight='bold',
-               color='white', zorder=6)
+        ax.text(prog_passes + 0.3, prog_carries + 0.2, self.player_name, 
+               ha='right', va='bottom', fontsize=14, fontweight='bold',
+               color='white', zorder=6,
+               bbox=dict(boxstyle='round,pad=0.4', facecolor='black', 
+                        edgecolor='white', linewidth=1.5, alpha=0.7))
         
         # Limites
         x_min, x_max = 0, max(12, prog_passes + 2)
@@ -216,16 +251,23 @@ class PlayerAnalyzer:
         
         # Titre
         ax.set_title('Projection des Passes et des Possessions progressives', 
-                    fontsize=25, color='white', fontweight='bold')
+                    fontsize=25, color='white', fontweight='bold', pad=20)
         
-        # Watermark
-        self._add_watermark(ax)
+        # Explication
+        explanation = "Passes progressives : passes qui rapprochent significativement le ballon du but adverse\nPossessions progressives : dribbles qui progressent vers le but adverse"
+        fig.text(0.5, 0.92, explanation, 
+                ha='center', va='top', fontsize=10, color='white', 
+                style='italic', alpha=0.9)
         
         # Style
         self._customize_axes(ax)
         ax.tick_params(axis='both', colors='white', labelsize=14)
         ax.set_xticks(np.arange(x_min, x_max + 1, 1))
         ax.set_yticks(np.arange(y_min, y_max + 1, 1))
+        
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_context_info(fig)
         
         plt.tight_layout()
         
@@ -234,7 +276,7 @@ class PlayerAnalyzer:
         plt.close()
     
     def plot_key_stats_cards(self, save_path: Optional[str] = None):
-        """Cartes de stats clés avec dégradé"""
+        """Cartes de stats clés avec contexte"""
         key_stats = [
             ('Goals', 'BUTS'),
             ('Assists', 'PASSES D.'),
@@ -263,6 +305,11 @@ class PlayerAnalyzer:
                    ha='center', va='center', fontsize=16, fontweight='bold',
                    color='white')
             
+            # Par 90'
+            ax.text(0.5, 0.15, 'par 90\'', 
+                   ha='center', va='center', fontsize=11, style='italic',
+                   color='white', alpha=0.8)
+            
             ax.set_xlim(0, 1)
             ax.set_ylim(0, 1)
             ax.axis('off')
@@ -275,12 +322,17 @@ class PlayerAnalyzer:
         
         # Titre
         fig.suptitle(f'{self.player_name}\nSTATISTIQUES CLÉS', 
-                    fontsize=25, fontweight='bold', color='white', y=0.98)
+                    fontsize=28, fontweight='bold', color='white', y=0.98)
         
-        # Watermark
-        fig.text(0.5, 0.02, '@TarbouchData', 
-                ha='left', va='bottom', fontsize=14, 
-                color='white', fontweight='bold', alpha=0.8)
+        # Sous-titre
+        subtitle = "Moyennes par 90 minutes jouées"
+        fig.text(0.5, 0.91, subtitle, 
+                ha='center', va='top', fontsize=12, color='white', 
+                style='italic', alpha=0.9)
+        
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_context_info(fig)
         
         plt.tight_layout()
         
@@ -289,7 +341,7 @@ class PlayerAnalyzer:
         plt.close()
     
     def plot_percentile_bars(self, save_path: Optional[str] = None):
-        """Barres horizontales avec dégradé"""
+        """Barres horizontales avec légendes"""
         categories = list(self.CATEGORIES.keys())
         scores = [self._get_category_average_normalized(cat) for cat in categories]
         
@@ -310,19 +362,29 @@ class PlayerAnalyzer:
         
         # Style
         ax.set_xlim(0, 110)
-        ax.set_xlabel('SCORE (0-100)', fontsize=16, color='white', fontweight='bold')
+        ax.set_xlabel('SCORE NORMALISÉ (0-100)', fontsize=16, color='white', fontweight='bold')
         ax.tick_params(axis='both', colors='white', labelsize=14)
         
         self._customize_axes(ax)
-        ax.axvline(50, color='white', linestyle='--', linewidth=2, alpha=0.5)
-        ax.axvline(70, color='white', linestyle='--', linewidth=2, alpha=0.5)
+        
+        # Lignes de référence avec labels
+        ax.axvline(50, color='white', linestyle='--', linewidth=2, alpha=0.6, zorder=3)
+        ax.axvline(70, color='white', linestyle='--', linewidth=2, alpha=0.6, zorder=3)
+        
+        ax.text(50, len(categories), '50: Seuil acceptable', 
+               ha='center', va='bottom', fontsize=10, color='white', 
+               fontweight='bold', alpha=0.8)
+        ax.text(70, len(categories), '70: Niveau élite', 
+               ha='center', va='bottom', fontsize=10, color='white', 
+               fontweight='bold', alpha=0.8)
         
         # Titre
         ax.set_title(f'{self.player_name}\nÉVALUATION PAR CATÉGORIE', 
-                    fontsize=25, fontweight='bold', color='white')
+                    fontsize=28, fontweight='bold', color='white', pad=20)
         
-        # Watermark
-        self._add_watermark(ax)
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_context_info(fig)
         
         plt.tight_layout()
         
@@ -331,7 +393,7 @@ class PlayerAnalyzer:
         plt.close()
     
     def plot_performance_grid(self, save_path: Optional[str] = None):
-        """Heatmap avec dégradé de fond"""
+        """Heatmap avec explications"""
         matrix_data = []
         row_labels = []
         
@@ -371,14 +433,26 @@ class PlayerAnalyzer:
                     ax.text(j, i, f'{val:.0f}', ha='center', va='center',
                            fontsize=14, fontweight='bold', color=color)
         
+        # Colorbar
+        cbar = plt.colorbar(im, ax=ax, pad=0.02)
+        cbar.set_label('Score (0-100)', fontsize=14, color='white', fontweight='bold')
+        cbar.ax.tick_params(colors='white', labelsize=12)
+        cbar.outline.set_edgecolor('white')
+        cbar.outline.set_linewidth(2)
+        
         # Titre
-        plt.title(f'{self.player_name}\nMATRICE DE PERFORMANCE', 
+        plt.title(f'{self.player_name}\nMATRICE DE PERFORMANCE DÉTAILLÉE', 
                  fontsize=25, fontweight='bold', color='white', pad=20)
         
-        # Watermark
-        ax.text(0.5, 0.75, '@TarbouchData', 
-               fontsize=14, color='white', fontweight='bold', 
-               ha='left', transform=ax.transAxes, alpha=0.8)
+        # Explication
+        explanation = "Chaque ligne = 1 catégorie | Chaque colonne = 1 statistique de la catégorie"
+        fig.text(0.5, 0.92, explanation, 
+                ha='center', va='top', fontsize=10, color='white', 
+                style='italic', alpha=0.9)
+        
+        # Watermark et contexte
+        self._add_watermark(fig)
+        self._add_context_info(fig)
         
         plt.tight_layout()
         
