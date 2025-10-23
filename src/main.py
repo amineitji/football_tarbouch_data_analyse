@@ -1,38 +1,40 @@
 """
-Main V2 - Pipeline complet avec analyse tactique avancée
-- Scraping + Métadonnées
-- Nettoyage des données
-- Visualisations tactiques innovantes par aspect (Passing, Shooting, Defense, etc.)
+Main V4 - Pipeline avec visualisations professionnelles
+Design moderne, échelles réalistes, lisibilité optimale
 """
 
 import os
-import sys
 from datetime import datetime
-
-# Import des classes
 from fbref_scraper import FBrefScraper
 from data_cleaner import DataCleaner
 from player_analyzer import PlayerAnalyzer
 
 
-def print_header(title: str):
-    """Affiche un header stylisé"""
-    print("\n" + "="*80)
-    print(f"  {title}")
-    print("="*80)
+def print_banner():
+    """Bannière stylée"""
+    banner = """
+    ╔═══════════════════════════════════════════════════════════════════════════╗
+    ║                                                                           ║
+    ║             🔥 FBREF TACTICAL ANALYZER V4 🔥                              ║
+    ║                                                                           ║
+    ║         Analyse tactique professionnelle avec visualisations modernes    ║
+    ║                                                                           ║
+    ╚═══════════════════════════════════════════════════════════════════════════╝
+    """
+    print(banner)
 
 
-def print_step(step_number: int, total_steps: int, description: str):
-    """Affiche une étape du pipeline"""
-    print(f"\n{'─'*80}")
-    print(f"📍 ÉTAPE {step_number}/{total_steps} : {description}")
-    print(f"{'─'*80}")
+def print_section(title: str, emoji: str = ""):
+    """Section stylée"""
+    print(f"\n{'='*80}")
+    print(f"  {emoji} {title}")
+    print(f"{'='*80}\n")
 
 
 def main():
-    """
-    Pipeline complet V2 : Scraping + Nettoyage + Analyse Tactique Avancée
-    """
+    """Pipeline complet avec 5 visualisations professionnelles"""
+    
+    print_banner()
     
     # ========================================================================
     # CONFIGURATION
@@ -53,35 +55,29 @@ def main():
     OUTPUT_DIR = './fbref_analysis_output'
     TACTICAL_DIR = './tactical_analysis'
     
-    # ========================================================================
-    # DÉBUT DU PIPELINE
-    # ========================================================================
-    
-    print_header("🔍 PIPELINE D'ANALYSE FBREF V2 - ANALYSE TACTIQUE")
-    print(f"Joueur    : {PLAYER_CONFIG['name']}")
-    print(f"Position  : {PLAYER_CONFIG['position']}")
-    print(f"Output    : {OUTPUT_DIR}")
-    print(f"Tactical  : {TACTICAL_DIR}")
-    print(f"Timestamp : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"\n✨ Fonctionnalités V2 :")
-    print(f"  • Extraction des métadonnées (nom, âge, taille, minutes jouées)")
-    print(f"  • Suppression du Percentile (contexte temporel)")
-    print(f"  • Format horizontal (1 ligne = 1 joueur)")
-    print(f"  • 🆕 Spider radar tactique")
-    print(f"  • 🆕 Heatmap par catégorie")
-    print(f"  • 🆕 Analyse détaillée par aspect (Passing, Shooting, Defense, etc.)")
-    print(f"  • 🆕 Graphiques polaires et barres pour chaque aspect")
-    
-    # Créer les dossiers de sortie
+    # Créer les dossiers
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(TACTICAL_DIR, exist_ok=True)
-    print(f"\n✓ Dossiers de sortie créés")
+    
+    print(f"📋 CONFIGURATION")
+    print(f"   Joueur      : {PLAYER_CONFIG['name']}")
+    print(f"   Position    : {PLAYER_CONFIG['position']}")
+    print(f"   Output      : {OUTPUT_DIR}")
+    print(f"   Graphiques  : {TACTICAL_DIR}")
+    print(f"   Timestamp   : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    print(f"\n✨ VISUALISATIONS GÉNÉRÉES (5 graphiques professionnels) :")
+    print(f"   1️⃣  Spider Radar       → Profil tactique global (échelles réelles)")
+    print(f"   2️⃣  Barres Catégories  → Comparaison des 5 aspects du jeu")
+    print(f"   3️⃣  Top 12 Stats       → Meilleures performances individuelles")
+    print(f"   4️⃣  Passing Polaire    → Analyse détaillée du passing (échelle réelle)")
+    print(f"   5️⃣  Heatmap Tactique   → Vue d'ensemble matricielle")
     
     # ========================================================================
-    # ÉTAPE 1 : SCRAPING + MÉTADONNÉES
+    # ÉTAPE 1 : SCRAPING
     # ========================================================================
     
-    print_step(1, 3, "SCRAPING DES DONNÉES + MÉTADONNÉES")
+    print_section("ÉTAPE 1/3 : SCRAPING DES DONNÉES", "📥")
     
     scraper = FBrefScraper(
         wait_time=SCRAPER_CONFIG['wait_time'],
@@ -89,6 +85,9 @@ def main():
     )
     
     try:
+        print(f"🌐 Connexion à FBref...")
+        print(f"   URL : {PLAYER_CONFIG['url'][:60]}...")
+        
         df_raw, metadata = scraper.scrape_player(
             url=PLAYER_CONFIG['url'],
             table_id=PLAYER_CONFIG['table_id'],
@@ -99,178 +98,161 @@ def main():
             print("\n❌ ERREUR : Échec du scraping")
             return
         
-        print(f"\n✓ Scraping réussi : {len(df_raw)} lignes extraites")
-        print(f"✓ Métadonnées extraites : {len(metadata)} champs")
+        print(f"\n✅ Scraping réussi")
+        print(f"   Lignes extraites : {len(df_raw)}")
+        print(f"   Colonnes         : {len(df_raw.columns)}")
         
-        # Afficher les métadonnées
         if metadata:
-            print("\n📋 MÉTADONNÉES DU JOUEUR :")
+            print(f"\n📊 MÉTADONNÉES EXTRAITES ({len(metadata)} champs) :")
             for key, value in metadata.items():
-                print(f"  • {key:<20} : {value}")
+                print(f"   • {key:<20} : {value}")
         
-        # Sauvegarder les données brutes
+        # Sauvegarder données brutes
         raw_file = os.path.join(OUTPUT_DIR, f"{PLAYER_CONFIG['name'].replace(' ', '_')}_raw.csv")
         df_raw.to_csv(raw_file, index=False, encoding='utf-8-sig')
-        print(f"\n✓ Données brutes sauvegardées : {raw_file}")
+        print(f"\n💾 Données brutes sauvegardées : {raw_file}")
         
+    except Exception as e:
+        print(f"\n❌ ERREUR lors du scraping : {e}")
+        return
     finally:
         scraper.close()
     
     # ========================================================================
-    # ÉTAPE 2 : NETTOYAGE + TRANSFORMATION HORIZONTALE
+    # ÉTAPE 2 : NETTOYAGE
     # ========================================================================
     
-    print_step(2, 3, "NETTOYAGE + TRANSFORMATION HORIZONTALE")
+    print_section("ÉTAPE 2/3 : NETTOYAGE ET TRANSFORMATION", "🧹")
     
-    cleaner = DataCleaner(verbose=True)
+    print("🔄 Application des transformations...")
+    print("   • Suppression du Percentile (contexte temporel)")
+    print("   • Conversion format horizontal (1 ligne = 1 joueur)")
+    print("   • Nettoyage des stats composées")
+    print("   • Suppression des colonnes vides")
     
+    cleaner = DataCleaner(verbose=False)
     df_clean = cleaner.clean(df_raw, metadata)
     
-    # Afficher le rapport
-    cleaner.print_cleaning_report()
+    print(f"\n✅ Nettoyage terminé")
+    print(f"   Format        : HORIZONTAL")
+    print(f"   Dimensions    : {df_clean.shape[0]} ligne × {df_clean.shape[1]} colonnes")
+    print(f"   Stats conservées : {df_clean.shape[1] - len(metadata or {})}")
     
-    # Sauvegarder les données nettoyées (format horizontal)
-    clean_file = os.path.join(OUTPUT_DIR, f"{PLAYER_CONFIG['name'].replace(' ', '_')}_clean_horizontal.csv")
+    # Sauvegarder données nettoyées
+    clean_file = os.path.join(OUTPUT_DIR, f"{PLAYER_CONFIG['name'].replace(' ', '_')}_clean.csv")
     df_clean.to_csv(clean_file, index=False, encoding='utf-8-sig')
-    print(f"\n✓ Données nettoyées sauvegardées : {clean_file}")
+    print(f"\n💾 Données nettoyées sauvegardées : {clean_file}")
     
-    # Afficher un aperçu
-    print("\n📊 APERÇU DES DONNÉES FINALES (format horizontal) :")
-    print(f"\nNombre de colonnes : {len(df_clean.columns)}")
-    print(f"\nPremières colonnes (métadonnées + stats) :")
-    
-    # Afficher les 10 premières colonnes
-    preview_cols = df_clean.columns[:min(10, len(df_clean.columns))]
-    for col in preview_cols:
-        value = df_clean[col].iloc[0]
-        print(f"  • {col:<30} : {value}")
-    
-    if len(df_clean.columns) > 10:
-        print(f"  ... et {len(df_clean.columns) - 10} autres colonnes")
+    print(f"\n📈 APERÇU DES STATISTIQUES :")
+    preview_stats = {col: df_clean[col].iloc[0] for col in df_clean.select_dtypes(include=['number']).columns[:8]}
+    for stat, value in preview_stats.items():
+        print(f"   • {stat:<30} : {value:.2f}")
+    if len(df_clean.select_dtypes(include=['number']).columns) > 8:
+        print(f"   ... et {len(df_clean.select_dtypes(include=['number']).columns) - 8} autres stats")
     
     # ========================================================================
-    # ÉTAPE 3 : ANALYSE TACTIQUE AVANCÉE + IA 🆕
+    # ÉTAPE 3 : VISUALISATIONS
     # ========================================================================
     
-    print_step(3, 3, "🆕 ANALYSE TACTIQUE AVANCÉE + INTELLIGENCE ARTIFICIELLE")
+    print_section("ÉTAPE 3/3 : GÉNÉRATION DES VISUALISATIONS", "🎨")
     
-    # Créer l'analyseur
     analyzer = PlayerAnalyzer(
         player_name=metadata.get('name', PLAYER_CONFIG['name']),
         position=metadata.get('position', PLAYER_CONFIG['position'])
     )
     
-    # Charger les données
     analyzer.load_data(df_clean)
     
     # Afficher le résumé tactique
-    print("\n📝 Génération du résumé tactique...")
     analyzer.print_tactical_summary()
     
-    # Générer tous les graphiques tactiques standard
-    print("\n🎨 Génération des visualisations tactiques standard...")
-    print("   (Cela peut prendre quelques secondes...)")
-    
-    try:
-        analyzer.generate_tactical_report(output_dir=TACTICAL_DIR)
-    except Exception as e:
-        print(f"\n⚠️  Erreur lors de la génération des graphiques : {e}")
-        print("   Les données ont été sauvegardées, mais les visualisations ont échoué.")
-        import traceback
-        traceback.print_exc()
-    
-    # 🆕 ANALYSES IA AVANCÉES
-    print("\n" + "="*80)
-    print("🤖 ANALYSES INTELLIGENCE ARTIFICIELLE AVANCÉES")
-    print("="*80)
+    print(f"\n🎨 GÉNÉRATION DES GRAPHIQUES...")
+    print(f"   Destination : {TACTICAL_DIR}\n")
     
     safe_name = PLAYER_CONFIG['name'].replace(' ', '_')
     
-    # 1. Analyse IA du profil
-    print("\n1️⃣  Analyse IA du profil tactique (K-Means, profiling)...")
+    # Graphique 1 : Spider Radar
+    print("   [1/5] 🕸️  Spider Radar (profil global)...", end=' ')
     try:
-        ai_profile_path = os.path.join(TACTICAL_DIR, f"{safe_name}_ai_profile.png")
-        ai_analysis = analyzer.analyze_player_profile_ai(save_path=ai_profile_path)
+        analyzer.plot_spider_radar(
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_1_spider_radar.png")
+        )
+        print("✅")
     except Exception as e:
-        print(f"⚠️  Erreur analyse IA : {e}")
-        ai_analysis = None
+        print(f"❌ ({e})")
     
-    # 2. Dashboard avancé multi-dimensionnel
-    print("\n2️⃣  Création du dashboard tactique avancé multi-dimensionnel...")
+    # Graphique 2 : Barres catégories
+    print("   [2/5] 📊 Barres horizontales (catégories)...", end=' ')
     try:
-        dashboard_path = os.path.join(TACTICAL_DIR, f"{safe_name}_advanced_dashboard.png")
-        analyzer.plot_advanced_comparison(save_path=dashboard_path)
+        analyzer.plot_category_bars(
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_2_categories_bars.png")
+        )
+        print("✅")
     except Exception as e:
-        print(f"⚠️  Erreur dashboard : {e}")
+        print(f"❌ ({e})")
     
-    print("\n✅ Analyses IA terminées !")
+    # Graphique 3 : Top 12 stats
+    print("   [3/5] 🏆 Top 12 statistiques...", end=' ')
+    try:
+        analyzer.plot_top_stats(
+            top_n=12,
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_3_top12_stats.png")
+        )
+        print("✅")
+    except Exception as e:
+        print(f"❌ ({e})")
+    
+    # Graphique 4 : Passing polaire
+    print("   [4/5] ⚽ Passing détaillé (polaire)...", end=' ')
+    try:
+        analyzer.plot_passing_polar(
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_4_passing_polar.png")
+        )
+        print("✅")
+    except Exception as e:
+        print(f"❌ ({e})")
+    
+    # Graphique 5 : Heatmap
+    print("   [5/5] 🔥 Heatmap tactique...", end=' ')
+    try:
+        analyzer.plot_heatmap_categories(
+            save_path=os.path.join(TACTICAL_DIR, f"{safe_name}_5_heatmap.png")
+        )
+        print("✅")
+    except Exception as e:
+        print(f"❌ ({e})")
     
     # ========================================================================
     # RÉSUMÉ FINAL
     # ========================================================================
     
-    print_header("📊 PIPELINE TERMINÉ")
+    print_section("PIPELINE TERMINÉ AVEC SUCCÈS", "✅")
     
-    print("\n📁 Fichiers générés :")
-    print(f"\n  Données :")
-    print(f"    • {raw_file}")
-    print(f"    • {clean_file}")
+    print("📁 FICHIERS GÉNÉRÉS :\n")
     
-    print(f"\n  Visualisations tactiques ({TACTICAL_DIR}) :")
+    print("   📄 Données :")
+    print(f"      • {os.path.basename(raw_file)}")
+    print(f"      • {os.path.basename(clean_file)}")
     
-    safe_name = PLAYER_CONFIG['name'].replace(' ', '_')
+    print(f"\n   🎨 Visualisations ({TACTICAL_DIR}) :")
+    print(f"      • {safe_name}_1_spider_radar.png      ← Profil tactique global")
+    print(f"      • {safe_name}_2_categories_bars.png   ← Comparaison par catégorie")
+    print(f"      • {safe_name}_3_top12_stats.png       ← Meilleures performances")
+    print(f"      • {safe_name}_4_passing_polar.png     ← Focus sur le passing")
+    print(f"      • {safe_name}_5_heatmap.png           ← Vue d'ensemble matricielle")
     
-    print(f"\n    🕷️  Spider Radar :")
-    print(f"      • {safe_name}_spider.png")
+    print(f"\n{'='*80}")
+    print(f"  ✨ 5 visualisations professionnelles avec échelles réalistes")
+    print(f"  ✨ Design moderne et lisibilité optimale")
+    print(f"  ✨ Analyse tactique complète en un coup d'œil")
+    print(f"{'='*80}")
     
-    print(f"\n    🔥 Heatmap :")
-    print(f"      • {safe_name}_heatmap.png")
+    print(f"\n💡 PROCHAINES ÉTAPES :")
+    print(f"   • Consulter les graphiques dans '{TACTICAL_DIR}'")
+    print(f"   • Analyser les forces et faiblesses du joueur")
+    print(f"   • Comparer avec d'autres profils similaires")
     
-    print(f"\n    📊 Vue d'ensemble :")
-    print(f"      • {safe_name}_multi_aspects.png")
-    
-    print(f"\n    ⭕ Analyses par aspect (Polaires) :")
-    categories = ['Shooting', 'Passing', 'Defense', 'Possession', 
-                 'Progression', 'Creation', 'Discipline']
-    for cat in categories:
-        print(f"      • {safe_name}_{cat.lower()}_polar.png")
-    
-    print(f"\n    📊 Détails par aspect (Barres) :")
-    for cat in categories:
-        print(f"      • {safe_name}_{cat.lower()}_bars.png")
-    
-    print(f"\n    🆕 🤖 ANALYSES IA AVANCÉES :")
-    print(f"      • {safe_name}_ai_profile.png - Profil IA & Points forts/faibles")
-    print(f"      • {safe_name}_advanced_dashboard.png - Dashboard multi-dimensionnel")
-    
-    print("\n✨ Analyses disponibles :")
-    print(f"  ✓ Spider radar tactique global (ÉCHELLE ADAPTATIVE)")
-    print(f"  ✓ Heatmap de performance par catégorie")
-    print(f"  ✓ Vue multi-aspects avec radars comparatifs")
-    print(f"  ✓ 7 graphiques polaires détaillés par aspect tactique")
-    print(f"  ✓ 7 graphiques en barres pour chaque aspect")
-    print(f"  🆕 ✓ Analyse IA du profil tactique (Forces/Faiblesses)")
-    print(f"  🆕 ✓ Dashboard avancé multi-dimensionnel")
-    print(f"  ✓ Total : 19 visualisations tactiques professionnelles")
-    
-    print("\n🎯 Comment utiliser les résultats :")
-    print(f"  1. Ouvrez les fichiers PNG dans {TACTICAL_DIR}")
-    print(f"  2. 🆕 Spider radar avec échelle ADAPTATIVE (met en valeur les forces)")
-    print(f"  3. 🆕 Analyse IA pour identifier le profil tactique automatiquement")
-    print(f"  4. 🆕 Dashboard multi-dimensionnel pour une vue à 360°")
-    print(f"  5. Consultez les graphiques par aspect (Shooting, Passing, Defense, etc.)")
-    print(f"  6. Utilisez la heatmap pour identifier forces/faiblesses rapidement")
-    
-    print("\n🚀 NOUVEAUTÉS V3 :")
-    print(f"  ⭐ Échelle adaptative sur spider radar (50% du max pour mieux valoriser)")
-    print(f"  ⭐ Analyse IA avec identification automatique du profil tactique")
-    print(f"  ⭐ Dashboard avancé : 6 vues complémentaires en 1 graphique")
-    print(f"  ⭐ Visualisations optimisées pour Twitter (lisibles, impactantes)")
-    
-    print("\n✅ Pipeline terminé avec succès !")
-    print(f"📂 Tous les fichiers sont dans : {OUTPUT_DIR} et {TACTICAL_DIR}")
-    
-    print("\n" + "="*80)
+    print(f"\n👋 Analyse terminée pour {PLAYER_CONFIG['name']}\n")
 
 
 if __name__ == "__main__":
@@ -278,9 +260,11 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\n\n⚠️  Pipeline interrompu par l'utilisateur")
+        print("👋 Au revoir\n")
     except Exception as e:
         print(f"\n\n❌ ERREUR FATALE : {e}")
         import traceback
         traceback.print_exc()
+        print("\n💡 Vérifiez la configuration et les dépendances")
     finally:
-        print("\n👋 Fin du programme")
+        print()
