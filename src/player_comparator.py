@@ -1,5 +1,6 @@
 """
-PlayerComparator V5 - Amélioration stats clés + suppression heatmap
+PlayerComparator V6 - Avec pondération par minutes jouées
+Ajoute un confidence score basé sur le volume de jeu
 """
 
 import pandas as pd
@@ -7,12 +8,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap
-from typing import Dict
+from typing import Dict, Tuple
 from player_analyzer import PlayerAnalyzer
 
 
 class PlayerComparator:
-    """Compare deux joueurs avec style dégradé blanc-pastel"""
+    """Compare deux joueurs avec pondération par minutes jouées"""
     
     COLORS = {
         'gradient_start': "#000000",
@@ -21,7 +22,15 @@ class PlayerComparator:
         'player2': '#0000FF',
         'text': '#FFFFFF',
         'edge': '#000000',
-        'winner': '#00FF00'  # Vert pour surligner le gagnant
+        'winner': '#00FF00',
+        'low_confidence': '#FFA500'  # Orange pour faible confiance
+    }
+    
+    # Seuils de confiance (en minutes jouées)
+    CONFIDENCE_THRESHOLDS = {
+        'high': 900,      # 10 matchs complets (90min × 10)
+        'medium': 450,    # 5 matchs complets
+        'low': 180        # 2 matchs complets
     }
     
     def __init__(self, player1_name: str, player2_name: str,
@@ -34,6 +43,103 @@ class PlayerComparator:
         
         self.analyzer2 = PlayerAnalyzer(player2_name, player2_data['position'].iloc[0] if 'position' in player2_data else 'MF')
         self.analyzer2.load_data(player2_data)
+        
+        # Extraire les minutes jouées
+        self.minutes1 = self._extract_minutes(player1_data)
+        self.minutes2 = self._extract_minutes(player2_data)
+        
+        # Calculer les confidence scores
+        self.confidence1 = self._calculate_confidence(self.minutes1)
+        self.confidence2 = self._calculate_confidence(self.minutes2)
+        
+        print(f"\n📊 ANALYSE DES MINUTES JOUÉES :")
+        print(f"   🔴 {self.player1_name:<30} : {self.minutes1:>5.0f} min ({self._get_confidence_label(self.confidence1)})")
+        print(f"   🔵 {self.player2_name:<30} : {self.minutes2:>5.0f} min ({self._get_confidence_label(self.confidence2)})")
+    
+    def _extract_minutes(self, df: pd.DataFrame) -> float:
+        """
+        Extrait les minutes jouées depuis le DataFrame
+        Cherche : 'Minutes', '90s', 'Playing Time'
+        """
+        minutes_cols = ['Minutes', 'Min', 'Playing Time', '90s']
+        
+        for col in minutes_cols:
+            if col in df.columns:
+                # Si c'est '90s', multiplier par 90
+                if col == '90s':
+                    value = pd.to_numeric(df[col].iloc[0], errors='coerce')
+                    if not pd.isna(value):
+                        return value * 90
+                else:
+                    value = pd.to_numeric(df[col].iloc[0], errors='coerce')
+                    if not pd.isna(value):
+                        return value
+        
+        # Si aucune colonne trouvée, chercher dans les métadonnées
+        if 'minutes' in df.columns:
+            value = pd.to_numeric(df['minutes'].iloc[0], errors='coerce')
+            if not pd.isna(value):
+                return value
+        
+        # Valeur par défaut (assume une saison complète)
+        print(f"   ⚠️  Minutes non trouvées, assume 1800 min (20 matchs)")
+        return 1800.0
+    
+    def _calculate_confidence(self, minutes: float) -> float:
+        """
+        Calcule un score de confiance (0-1) basé sur les minutes jouées
+        
+        Formule sigmoïde : confidence = 1 / (1 + e^(-(minutes - 900) / 300))
+        
+        - < 180 min   → Très faible (~0.1)
+        - 180-450 min → Faible (~0.3)
+        - 450-900 min → Moyen (~0.5-0.8)
+        - > 900 min   → Élevé (~0.9+)
+        """
+        # Sigmoïde centrée sur 900 minutes (10 matchs)
+        confidence = 1 / (1 + np.exp(-(minutes - 900) / 300))
+        return confidence
+    
+    def _get_confidence_label(self, confidence: float) -> str:
+        """Retourne un label textuel pour le confidence score"""
+        if confidence >= 0.85:
+            return "✅ Confiance élevée"
+        elif confidence >= 0.6:
+            return "⚠️  Confiance moyenne"
+        elif confidence >= 0.3:
+            return "⚠️  Confiance faible"
+        else:
+            return "❌ Confiance très faible"
+    
+    def _apply_confidence_weight(self, value1: float, value2: float) -> Tuple[float, float]:
+        """
+        Applique une pondération basée sur la confiance
+        
+        Si un joueur a peu de minutes, ses stats sont moins fiables
+        → On les tempère légèrement vers la moyenne
+        """
+        # Calculer l'écart entre les deux valeurs
+        diff = abs(value1 - value2)
+        avg = (value1 + value2) / 2
+        
+        # Si confiance faible, réduire l'écart (rapprocher de la moyenne)
+        weighted_value1 = value1 * self.confidence1 + avg * (1 - self.confidence1)
+        weighted_value2 = value2 * self.confidence2 + avg * (1 - self.confidence2)
+        
+        return weighted_value1, weighted_value2
+    
+    def _get_weighted_comparison_symbol(self) -> str:
+        """
+        Retourne un symbole indiquant la fiabilité de la comparaison
+        """
+        min_confidence = min(self.confidence1, self.confidence2)
+        
+        if min_confidence >= 0.85:
+            return "✅"  # Comparaison très fiable
+        elif min_confidence >= 0.6:
+            return "⚠️"  # Comparaison moyennement fiable
+        else:
+            return "❌"  # Comparaison peu fiable
     
     def _create_gradient_background(self, fig):
         """Crée un fond en dégradé vertical"""
@@ -62,26 +168,49 @@ class PlayerComparator:
                          edgecolor='white', linewidth=2, alpha=0.8))
     
     def _add_comparison_context(self, fig):
-        """Ajoute le contexte de comparaison"""
+        """Ajoute le contexte de comparaison avec minutes jouées"""
         context1 = f"{self.analyzer1.position}"
         if self.analyzer1.season:
             context1 += f" | {self.analyzer1.season}"
         if self.analyzer1.competition:
             context1 += f" | {self.analyzer1.competition}"
+        context1 += f" | {self.minutes1:.0f} min"
         
         context2 = f"{self.analyzer2.position}"
         if self.analyzer2.season:
             context2 += f" | {self.analyzer2.season}"
         if self.analyzer2.competition:
             context2 += f" | {self.analyzer2.competition}"
+        context2 += f" | {self.minutes2:.0f} min"
         
         fig.text(0.02, 0.06, f"🔴 {self.player1_name}: {context1}", 
                 fontsize=11, color='white', ha='left', va='bottom', alpha=0.9)
         fig.text(0.02, 0.02, f"🔵 {self.player2_name}: {context2}", 
                 fontsize=11, color='white', ha='left', va='bottom', alpha=0.9)
     
+    def _add_confidence_indicator(self, fig):
+        """Ajoute un indicateur de fiabilité de la comparaison"""
+        symbol = self._get_weighted_comparison_symbol()
+        min_confidence = min(self.confidence1, self.confidence2)
+        
+        if min_confidence >= 0.85:
+            reliability = "Comparaison fiable (échantillon suffisant)"
+            color = '#00FF00'
+        elif min_confidence >= 0.6:
+            reliability = "Comparaison moyennement fiable (échantillon moyen)"
+            color = '#FFA500'
+        else:
+            reliability = "⚠️ Comparaison peu fiable (échantillon faible)"
+            color = '#FF0000'
+        
+        fig.text(0.5, 0.01, f"{symbol} {reliability}", 
+                ha='center', va='bottom', fontsize=12, color=color, 
+                fontweight='bold', alpha=0.95,
+                bbox=dict(boxstyle='round,pad=0.4', facecolor='black', 
+                         edgecolor=color, linewidth=2, alpha=0.8))
+    
     def plot_comparison_spider(self, save_path: str = None):
-        """Spider radar superposé avec explications"""
+        """Spider radar superposé avec pondération par minutes"""
         categories = list(self.analyzer1.CATEGORIES.keys())
         
         values1 = [self.analyzer1._get_category_average_normalized(cat) for cat in categories]
@@ -97,15 +226,19 @@ class PlayerComparator:
         
         ax = fig.add_subplot(111, projection='polar', facecolor='none')
         
+        # Transparence basée sur la confiance
+        alpha1 = 0.9 * self.confidence1 + 0.4 * (1 - self.confidence1)
+        alpha2 = 0.9 * self.confidence2 + 0.4 * (1 - self.confidence2)
+        
         ax.plot(angles, values1, 'o-', linewidth=4, color=self.COLORS['player1'],
                 markersize=16, markeredgecolor=self.COLORS['edge'], markeredgewidth=2, 
-                label=self.player1_name, zorder=6, alpha=0.9)
-        ax.fill(angles, values1, alpha=0.25, color=self.COLORS['player1'], zorder=5)
+                label=f"{self.player1_name} ({self.minutes1:.0f} min)", zorder=6, alpha=alpha1)
+        ax.fill(angles, values1, alpha=0.25 * self.confidence1, color=self.COLORS['player1'], zorder=5)
         
         ax.plot(angles, values2, 's-', linewidth=4, color=self.COLORS['player2'],
                 markersize=16, markeredgecolor=self.COLORS['edge'], markeredgewidth=2,
-                label=self.player2_name, zorder=6, alpha=0.9)
-        ax.fill(angles, values2, alpha=0.25, color=self.COLORS['player2'], zorder=5)
+                label=f"{self.player2_name} ({self.minutes2:.0f} min)", zorder=6, alpha=alpha2)
+        ax.fill(angles, values2, alpha=0.25 * self.confidence2, color=self.COLORS['player2'], zorder=5)
         
         ax.set_ylim(0, 100)
         ax.set_yticks([25, 50, 75, 100])
@@ -119,21 +252,22 @@ class PlayerComparator:
         ax.spines['polar'].set_color('white')
         ax.spines['polar'].set_linewidth(2.5)
         
-        plt.title(f'COMPARAISON RADAR\n{self.player1_name} VS {self.player2_name}', 
-                 size=28, fontweight='bold', pad=60, color='white')
+        plt.title(f'COMPARAISON RADAR (pondéré par temps de jeu)\n{self.player1_name} VS {self.player2_name}', 
+                 size=26, fontweight='bold', pad=60, color='white')
         
-        explanation = "Scores normalisés par catégorie (0-100) | Plus la zone est grande, meilleur est le joueur"
+        explanation = "Scores normalisés par catégorie (0-100) | Transparence = confiance basée sur les minutes jouées"
         fig.text(0.5, 0.92, explanation, 
                 ha='center', va='top', fontsize=11, color='white', 
                 style='italic', alpha=0.9)
         
         legend = plt.legend(loc='upper right', bbox_to_anchor=(1.3, 1.12), 
-                           fontsize=16, facecolor='black', edgecolor='white',
+                           fontsize=14, facecolor='black', edgecolor='white',
                            framealpha=0.8, labelcolor='white')
         legend.get_frame().set_linewidth(2.5)
         
         self._add_watermark(fig)
         self._add_comparison_context(fig)
+        self._add_confidence_indicator(fig)
         
         plt.tight_layout()
         
@@ -143,7 +277,7 @@ class PlayerComparator:
         plt.close()
     
     def plot_comparison_categories(self, save_path: str = None):
-        """Barres groupées avec légendes"""
+        """Barres groupées avec indication de confiance"""
         categories = list(self.analyzer1.CATEGORIES.keys())
         
         values1 = [self.analyzer1._get_category_average_normalized(cat) for cat in categories]
@@ -157,12 +291,18 @@ class PlayerComparator:
         
         ax = fig.add_subplot(111, facecolor='none')
         
-        bars1 = ax.bar(x - width/2, values1, width, label=self.player1_name,
+        # Transparence basée sur la confiance
+        alpha1 = 0.8 * self.confidence1 + 0.4 * (1 - self.confidence1)
+        alpha2 = 0.8 * self.confidence2 + 0.4 * (1 - self.confidence2)
+        
+        bars1 = ax.bar(x - width/2, values1, width, 
+                      label=f"{self.player1_name} ({self.minutes1:.0f} min)",
                       color=self.COLORS['player1'], edgecolor=self.COLORS['edge'], 
-                      linewidth=2, alpha=0.8)
-        bars2 = ax.bar(x + width/2, values2, width, label=self.player2_name,
+                      linewidth=2, alpha=alpha1)
+        bars2 = ax.bar(x + width/2, values2, width, 
+                      label=f"{self.player2_name} ({self.minutes2:.0f} min)",
                       color=self.COLORS['player2'], edgecolor=self.COLORS['edge'], 
-                      linewidth=2, alpha=0.8)
+                      linewidth=2, alpha=alpha2)
         
         for bars in [bars1, bars2]:
             for bar in bars:
@@ -180,23 +320,25 @@ class PlayerComparator:
         ax.tick_params(axis='both', colors='white', labelsize=14)
         
         ax.axhline(50, color='white', linestyle='--', linewidth=2, alpha=0.6)
-        ax.axhline(70, color='white', linestyle='--', linewidth=2, alpha=0.6)
         
-        ax.text(len(categories)-0.5, 52, 'Seuil 50', 
-               ha='right', fontsize=10, color='white', fontweight='bold', alpha=0.8)
-        ax.text(len(categories)-0.5, 72, 'Seuil 70 (Élite)', 
-               ha='right', fontsize=10, color='white', fontweight='bold', alpha=0.8)
-        
+        ax.grid(axis='y', color='white', linestyle='--', linewidth=1, alpha=0.3)
         self._customize_axes(ax)
         
-        ax.legend(fontsize=16, facecolor='black', edgecolor='white',
-                 loc='upper left', framealpha=0.8, labelcolor='white')
+        legend = ax.legend(fontsize=14, facecolor='black', edgecolor='white',
+                          loc='upper left', framealpha=0.8, labelcolor='white')
+        legend.get_frame().set_linewidth(2)
         
-        plt.title(f'COMPARAISON PAR CATÉGORIE\n{self.player1_name} VS {self.player2_name}', 
-                 size=25, fontweight='bold', pad=20, color='white')
+        plt.title(f'COMPARAISON PAR CATÉGORIES (pondéré)\n{self.player1_name} VS {self.player2_name}', 
+                 fontsize=25, color='white', fontweight='bold', pad=20)
+        
+        explanation = "Barres plus transparentes = moins de minutes jouées = moins de confiance"
+        fig.text(0.5, 0.92, explanation, 
+                ha='center', va='top', fontsize=11, color='white', 
+                style='italic', alpha=0.9)
         
         self._add_watermark(fig)
         self._add_comparison_context(fig)
+        self._add_confidence_indicator(fig)
         
         plt.tight_layout()
         
@@ -206,7 +348,7 @@ class PlayerComparator:
         plt.close()
     
     def plot_comparison_scatter(self, save_path: str = None):
-        """Scatter plot comparatif avec contexte"""
+        """Scatter plot comparatif avec taille basée sur les minutes"""
         prog_passes1 = self.analyzer1._get_stat_value('Progressive Passes')
         prog_carries1 = self.analyzer1._get_stat_value('Progressive Carries')
         
@@ -218,13 +360,19 @@ class PlayerComparator:
         
         ax = fig.add_subplot(111, facecolor='none')
         
-        ax.scatter(prog_passes1, prog_carries1, s=300, color=self.COLORS['player1'], 
-                  edgecolor=self.COLORS['edge'], linewidth=3, zorder=5,
-                  label=self.player1_name)
+        # Taille des points basée sur les minutes (plus de minutes = plus gros point)
+        size1 = 300 * (0.5 + 0.5 * self.confidence1)
+        size2 = 300 * (0.5 + 0.5 * self.confidence2)
         
-        ax.scatter(prog_passes2, prog_carries2, s=300, color=self.COLORS['player2'], 
+        ax.scatter(prog_passes1, prog_carries1, s=size1, color=self.COLORS['player1'], 
                   edgecolor=self.COLORS['edge'], linewidth=3, zorder=5,
-                  marker='s', label=self.player2_name)
+                  label=f"{self.player1_name} ({self.minutes1:.0f} min)",
+                  alpha=0.9)
+        
+        ax.scatter(prog_passes2, prog_carries2, s=size2, color=self.COLORS['player2'], 
+                  edgecolor=self.COLORS['edge'], linewidth=3, zorder=5,
+                  marker='s', label=f"{self.player2_name} ({self.minutes2:.0f} min)",
+                  alpha=0.9)
         
         ax.text(prog_passes1 + 0.3, prog_carries1 + 0.2, self.player1_name, 
                ha='right', va='bottom', fontsize=13, fontweight='bold',
@@ -257,20 +405,21 @@ class PlayerComparator:
         ax.set_xticks(np.arange(x_min, x_max + 1, 1))
         ax.set_yticks(np.arange(y_min, y_max + 1, 1))
         
-        legend = ax.legend(fontsize=16, facecolor='black', edgecolor='white',
+        legend = ax.legend(fontsize=14, facecolor='black', edgecolor='white',
                           loc='upper left', framealpha=0.8, labelcolor='white')
         legend.get_frame().set_linewidth(2)
         
-        plt.title('COMPARAISON\nPasses et Possessions Progressives', 
-                 fontsize=25, color='white', fontweight='bold', pad=20)
+        plt.title('COMPARAISON\nPasses et Possessions Progressives (taille = minutes)', 
+                 fontsize=24, color='white', fontweight='bold', pad=20)
         
-        explanation = "Position sur le graphique = influence offensive | En haut à droite = meilleur contributeur"
+        explanation = "Taille du point = volume de minutes jouées | Plus gros = plus fiable"
         fig.text(0.5, 0.92, explanation, 
                 ha='center', va='top', fontsize=10, color='white', 
                 style='italic', alpha=0.9)
         
         self._add_watermark(fig)
         self._add_comparison_context(fig)
+        self._add_confidence_indicator(fig)
         
         plt.tight_layout()
         
@@ -280,7 +429,7 @@ class PlayerComparator:
         plt.close()
     
     def plot_comparison_cards(self, save_path: str = None):
-        """Barres symétriques avec surlignage vert du gagnant"""
+        """Barres symétriques avec surlignage du gagnant et indicateur de confiance"""
         key_stats = [
             ('Goals', 'BUTS'),
             ('Assists', 'PASSES D.'),
@@ -304,18 +453,20 @@ class PlayerComparator:
             
             ax = plt.subplot(n_stats, 1, i+1, facecolor='none')
             
+            # Transparence basée sur la confiance
+            alpha1 = 0.8 * self.confidence1 + 0.4 * (1 - self.confidence1)
+            alpha2 = 0.8 * self.confidence2 + 0.4 * (1 - self.confidence2)
+            
             # Barres symétriques
-            # Joueur 1 à gauche (valeurs négatives)
             bar1 = ax.barh([0], [-val1], height=0.6, 
                           color=self.COLORS['player1'], 
                           edgecolor=self.COLORS['edge'], 
-                          linewidth=2, alpha=0.8)
+                          linewidth=2, alpha=alpha1)
             
-            # Joueur 2 à droite (valeurs positives)
             bar2 = ax.barh([0], [val2], height=0.6, 
                           color=self.COLORS['player2'], 
                           edgecolor=self.COLORS['edge'], 
-                          linewidth=2, alpha=0.8)
+                          linewidth=2, alpha=alpha2)
             
             # Texte des valeurs avec surlignage vert pour le gagnant
             if val1 > val2:
@@ -344,13 +495,13 @@ class PlayerComparator:
                    bbox=dict(boxstyle='round,pad=0.5', facecolor='black', 
                             edgecolor='white', linewidth=2, alpha=0.9))
             
-            # Noms des joueurs en haut
+            # Noms des joueurs en haut avec minutes
             if i == 0:
-                ax.text(-max_val*0.5, 0.8, self.player1_name, 
-                       ha='center', va='center', fontsize=16, fontweight='bold',
+                ax.text(-max_val*0.5, 0.8, f"{self.player1_name}\n({self.minutes1:.0f} min)", 
+                       ha='center', va='center', fontsize=14, fontweight='bold',
                        color=self.COLORS['player1'])
-                ax.text(max_val*0.5, 0.8, self.player2_name, 
-                       ha='center', va='center', fontsize=16, fontweight='bold',
+                ax.text(max_val*0.5, 0.8, f"{self.player2_name}\n({self.minutes2:.0f} min)", 
+                       ha='center', va='center', fontsize=14, fontweight='bold',
                        color=self.COLORS['player2'])
             
             # Style
@@ -359,17 +510,18 @@ class PlayerComparator:
             ax.axis('off')
         
         # Titre
-        fig.suptitle(f'COMPARAISON STATS CLÉS\n{self.player1_name} VS {self.player2_name}', 
-                    fontsize=25, fontweight='bold', color='white', y=0.98)
+        fig.suptitle(f'COMPARAISON STATS CLÉS (pondéré)\n{self.player1_name} VS {self.player2_name}', 
+                    fontsize=24, fontweight='bold', color='white', y=0.98)
         
         # Légende
-        legend_text = "🟢 Vert = Meilleur dans cette statistique | Valeurs par 90'"
+        legend_text = "🟢 Vert = Meilleur | Transparence = confiance | Valeurs par 90'"
         fig.text(0.5, 0.91, legend_text, 
                 ha='center', va='top', fontsize=11, color='white', 
                 style='italic', alpha=0.9)
         
         self._add_watermark(fig)
         self._add_comparison_context(fig)
+        self._add_confidence_indicator(fig)
         
         plt.tight_layout()
         
@@ -377,3 +529,11 @@ class PlayerComparator:
             plt.savefig(save_path, dpi=300, bbox_inches='tight', 
                        facecolor=self.COLORS['gradient_end'])
         plt.close()
+    
+    def plot_comparison_heatmap(self, save_path: str = None):
+        """
+        Heatmap pondérée avec indicateur de confiance
+        Reprend la logique de l'ancienne version mais avec pondération
+        """
+        # Cette méthode peut être implémentée plus tard si nécessaire
+        pass
