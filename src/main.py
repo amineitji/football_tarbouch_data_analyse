@@ -161,6 +161,11 @@ def load_or_scrape_player(player_name: str, player_url: str, output_dir: str):
             lambda x: str(x).replace(',', '').replace('"', '') if isinstance(x, str) else x
         )
         
+        # IMPORTANT: Normaliser aussi available_seasons pour correspondre au CSV
+        for season in available_seasons:
+            season['competition'] = season['competition'].replace(',', '').replace('"', '')
+            season['text'] = f"{season['season']} {season['competition']}"
+        
         # Sauvegarder sans guillemets
         df_all_seasons.to_csv(csv_file, index=False, encoding='utf-8-sig', quoting=csv.QUOTE_MINIMAL)
         print(f"\n💾 Données sauvegardées (sans guillemets et sans virgules internes) : {csv_file}")
@@ -214,11 +219,17 @@ def analyze_single_player():
     df_selected = df_all_seasons[
         (df_all_seasons['season'] == selected_season['season']) &
         (df_all_seasons['competition'] == selected_season['competition'])
-    ]
+    ].copy()
     
+    if df_selected.empty:
+        print(f"\n❌ Aucune donnée trouvée pour cette saison")
+        return
+    
+    # Ajouter métadonnées
     season_metadata = metadata.copy()
-    season_metadata['season'] = selected_season['season']
-    season_metadata['competition'] = selected_season['competition']
+    for key, value in season_metadata.items():
+        if key not in df_selected.columns:
+            df_selected.insert(0, key, value)
     
     df_clean = cleaner.clean(df_selected, season_metadata)
     
@@ -256,7 +267,7 @@ def analyze_single_player():
             method(save_path=os.path.join(TACTICAL_DIR, graph_info[2]))
             print("✅")
         except Exception as e:
-            print(f"❌ ({str(e)[:30]})")
+            print(f"\n❌ Erreur lors de la génération : {e}")
     
     print_separator()
     print("  ✅ ANALYSE TERMINÉE")
@@ -359,14 +370,21 @@ def compare_two_players():
     for i, player in enumerate(players_data, 1):
         print(f"\n   [{i}/2] {player['name']}...", end=' ')
         
+        # Nouveau format: déjà 1 ligne par saison, filtrer directement
         df_selected = player['df_all'][
             (player['df_all']['season'] == player['selected_season']['season']) &
             (player['df_all']['competition'] == player['selected_season']['competition'])
-        ]
+        ].copy()
         
+        if df_selected.empty:
+            print(f"❌ Aucune donnée trouvée")
+            return
+        
+        # Ajouter métadonnées manquantes
         metadata = player['metadata'].copy()
-        metadata['season'] = player['selected_season']['season']
-        metadata['competition'] = player['selected_season']['competition']
+        for key, value in metadata.items():
+            if key not in df_selected.columns:
+                df_selected.insert(0, key, value)
         
         df_clean = cleaner.clean(df_selected, metadata)
         cleaned_data.append(df_clean)
@@ -406,7 +424,7 @@ def compare_two_players():
             getattr(comparator, method)(save_path=os.path.join(COMPARISON_DIR, filename))
             print("✅")
         except Exception as e:
-            print(f"❌ ({str(e)[:30]})")
+            print(f"\n❌ Erreur lors de la génération : {e}")
     
     print_separator()
     print("  ✅ COMPARAISON TERMINÉE")

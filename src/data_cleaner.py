@@ -105,25 +105,18 @@ class DataCleaner:
     
     def clean(self, df: pd.DataFrame, metadata: Dict = None) -> pd.DataFrame:
         """
-        Applique tous les nettoyages et transforme en format horizontal
+        Nettoyage simple car données déjà en format horizontal (1 ligne = 1 saison)
         
         Args:
-            df: DataFrame brut vertical (stats en lignes)
+            df: DataFrame déjà horizontal (stats en colonnes)
             metadata: Métadonnées du joueur
             
         Returns:
-            DataFrame horizontal (stats en colonnes, 1 ligne = 1 joueur)
+            DataFrame nettoyé avec métadonnées
         """
         self._log("="*80)
         self._log("DÉBUT DU NETTOYAGE", "START")
         self._log("="*80)
-        
-        # Détection du format "Last 365 Days" (agrégé multi-compétitions)
-        is_365_days = False
-        if metadata and 'competition' in metadata:
-            if 'Last 365 Days' in str(metadata['competition']):
-                is_365_days = True
-                self._log("⚠️ FORMAT SPÉCIAL DÉTECTÉ: Last 365 Days", "WARNING")
         
         self.cleaning_report['initial_rows'] = len(df)
         self.cleaning_report['initial_cols'] = len(df.columns)
@@ -131,141 +124,32 @@ class DataCleaner:
         
         df_clean = df.copy()
         
-        # 🔧 GESTION SPÉCIALE: Détecter si première ligne contient les vrais headers
-        first_row = df_clean.iloc[0].astype(str).tolist()
-        if 'Statistic' in first_row or 'Per 90' in first_row or 'Per_90' in first_row:
-            self._log("⚠️ Headers détectés en première ligne de données", "WARNING")
-            # Remplacer les colonnes par la première ligne
-            df_clean.columns = first_row
-            # Supprimer la première ligne
-            df_clean = df_clean.iloc[1:].reset_index(drop=True)
-            self._log("✓ Headers corrigés depuis première ligne", "SUCCESS")
+        # Ajouter métadonnées si fournies
+        if metadata:
+            for key, value in metadata.items():
+                if key not in df_clean.columns:
+                    df_clean.insert(0, key, value)
         
-        # 1️⃣ Aplatir les MultiIndex
-        self._log("\n[1/8] Gestion des MultiIndex...")
-        df_clean = self._flatten_multiindex_columns(df_clean)
+        # Supprimer colonnes de pourcentages vides
+        df_clean = self._remove_percentage_and_duplicate_columns(df_clean)
         
-        # 2️⃣ Nettoyage des noms de colonnes
-        self._log("\n[2/8] Nettoyage des noms de colonnes...")
-        df_clean.columns = df_clean.columns.astype(str).str.strip()
-        df_clean.columns = [col.replace(" ", "_") for col in df_clean.columns]
-        
-        # 3️⃣ Identifier les colonnes
-        self._log("\n[3/8] Identification des colonnes...")
-        col_names = list(df_clean.columns)
-        self._log(f"Colonnes détectées : {col_names[:10]}...")
-        
-        # Normalisation des colonnes principales
-        rename_map = {}
-        for col in df_clean.columns:
-            col_lower = str(col).lower().strip()
-            col_normalized = col_lower.replace("_", "").replace(" ", "").replace("-", "")
-            
-            # Détection Per 90
-            if col_normalized == "per90" or col_lower in ["per 90", "per_90", "per-90"]:
-                rename_map[col] = "Per_90"
-                self._log(f"✓ Colonne Per90 trouvée : '{col}' -> 'Per_90'")
-            
-            # Détection Statistic
-            elif "statistic" in col_lower:
-                rename_map[col] = "Statistic"
-                self._log(f"✓ Colonne Statistic trouvée : '{col}' -> 'Statistic'")
-        
-        # Appliquer renommage
-        if rename_map:
-            df_clean = df_clean.rename(columns=rename_map)
-            self._log(f"Renommage appliqué : {len(rename_map)} colonne(s)")
-        else:
-            self._log("⚠️ Aucune colonne standard trouvée pour renommage", "WARNING")
-        
-        # Vérification et fallback
-        if "Per_90" not in df_clean.columns:
-            self._log("❌ 'Per_90' introuvable après renommage", "ERROR")
-            available_cols = list(df_clean.columns)
-            self._log(f"Colonnes actuelles: {available_cols[:20]}", "ERROR")
-            
-            # Fallback 1: chercher colonnes contenant "90"
-            per90_candidates = [c for c in df_clean.columns if "90" in str(c)]
-            if per90_candidates:
-                self._log(f"Candidats '90' trouvés: {per90_candidates}", "WARNING")
-                df_clean = df_clean.rename(columns={per90_candidates[0]: "Per_90"})
-                self._log(f"✓ Utilisation de '{per90_candidates[0]}' comme Per_90", "SUCCESS")
-            else:
-                # Fallback 2: pour "Last 365 Days", chercher des colonnes de valeurs numériques
-                if is_365_days:
-                    self._log("Mode 365 Days: recherche colonne de valeurs...", "WARNING")
-                    # Chercher colonne avec des valeurs numériques (pas Statistic ni Percentile)
-                    for col in df_clean.columns:
-                        if col not in ['Statistic', 'Percentile'] and df_clean[col].dtype in ['float64', 'int64', 'object']:
-                            try:
-                                pd.to_numeric(df_clean[col], errors='coerce')
-                                df_clean = df_clean.rename(columns={col: "Per_90"})
-                                self._log(f"✓ Colonne valeurs utilisée: '{col}' -> 'Per_90'", "SUCCESS")
-                                break
-                            except:
-                                continue
-                
-                # Si toujours pas trouvé
-                if "Per_90" not in df_clean.columns:
-                    raise KeyError(
-                        f"❌ ERREUR FATALE : impossible de trouver la colonne de valeurs.\n"
-                        f"Colonnes disponibles : {available_cols}\n"
-                        f"Format 365 Days : {is_365_days}"
-                    )
-        
-        # 4️⃣ Supprimer Percentile
-        self._log("\n[4/8] Suppression du Percentile...")
+        # Supprimer colonnes Percentile si présentes
         if "Percentile" in df_clean.columns:
             df_clean = df_clean.drop(columns=["Percentile"])
             self.cleaning_report["removed_percentiles"] = True
             self._log("Colonne Percentile supprimée ✓", "SUCCESS")
         
-        # 5️⃣ Supprimer les lignes vides / headers
-        self._log("\n[5/8] Suppression des lignes de catégories vides...")
-        initial_len = len(df_clean)
-        df_clean = df_clean[df_clean["Per_90"].notna()]
-        df_clean = df_clean[df_clean["Per_90"].astype(str).str.strip() != ""]
-        df_clean = df_clean[df_clean["Statistic"] != "Statistic"]
-        removed = initial_len - len(df_clean)
-        if removed > 0:
-            self._log(f"Supprimé {removed} ligne(s) vide(s) ✓", "SUCCESS")
-            self.cleaning_report["removed_empty"] = removed
-        
-        # 6️⃣ Supprimer les stats composées
-        self._log("\n[6/8] Suppression des stats composées...")
-        initial_len = len(df_clean)
-        mask = df_clean["Statistic"].apply(lambda x: not self._is_composite_stat(str(x)))
-        df_clean = df_clean[mask]
-        removed_composites = initial_len - len(df_clean)
-        self.cleaning_report["removed_composites"] = removed_composites
-        if removed_composites > 0:
-            self._log(f"Supprimé {removed_composites} stat(s) composée(s) ✓", "SUCCESS")
-        
-        # 7️⃣ Format horizontal
-        self._log("\n[7/8] Transformation en format horizontal...")
-        df_clean["Per_90"] = pd.to_numeric(df_clean["Per_90"], errors="coerce")
-        df_horizontal = pd.DataFrame([df_clean["Per_90"].values], columns=df_clean["Statistic"].values)
-        
-        if metadata:
-            for key, value in metadata.items():
-                df_horizontal.insert(0, key, value)
-        
-        # 8️⃣ Nettoyage final
-        self._log("\n[8/8] Nettoyage final des colonnes...")
-        df_horizontal = self._remove_percentage_and_duplicate_columns(df_horizontal)
-        
         # Rapport final
-        self.cleaning_report["final_rows"] = len(df_horizontal)
-        self.cleaning_report["final_cols"] = len(df_horizontal.columns)
+        self.cleaning_report["final_rows"] = len(df_clean)
+        self.cleaning_report["final_cols"] = len(df_clean.columns)
         
         self._log("\n" + "="*80)
         self._log("NETTOYAGE TERMINÉ", "SUCCESS")
         self._log("="*80)
-        self._log(f"Format : HORIZONTAL (1 ligne = 1 joueur)")
-        self._log(f"Dimensions finales : {df_horizontal.shape[0]} ligne × {df_horizontal.shape[1]} colonnes")
-        self._log(f"Stats conservées : {df_horizontal.shape[1] - len(metadata or {})} statistiques")
+        self._log(f"Format : HORIZONTAL (1 ligne = 1 saison)")
+        self._log(f"Dimensions finales : {df_clean.shape[0]} ligne × {df_clean.shape[1]} colonnes")
         
-        return df_horizontal
+        return df_clean
     
     def get_cleaning_report(self) -> dict:
         """Retourne le rapport de nettoyage"""
