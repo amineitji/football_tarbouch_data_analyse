@@ -10,6 +10,7 @@ from data_cleaner import DataCleaner
 from player_analyzer import PlayerAnalyzer
 from player_comparator import PlayerComparator
 import pandas as pd
+import csv
 
 
 def print_banner():
@@ -110,7 +111,7 @@ def load_or_scrape_player(player_name: str, player_url: str, output_dir: str):
             print(f"\n✅ Chargement depuis le cache...")
             
             try:
-                df_all_seasons = pd.read_csv(csv_file)
+                df_all_seasons = pd.read_csv(csv_file, quoting=csv.QUOTE_ALL)
                 
                 # Reconstruire available_seasons depuis le DataFrame
                 available_seasons = []
@@ -155,9 +156,15 @@ def load_or_scrape_player(player_name: str, player_url: str, output_dir: str):
         if df_all_seasons is None:
             return None, None, []
         
-        # Sauvegarder le CSV
-        df_all_seasons.to_csv(csv_file, index=False, encoding='utf-8-sig')
-        print(f"\n💾 Données sauvegardées : {csv_file}")
+        # Nettoyage des virgules et guillemets dans les textes avant sauvegarde
+        df_all_seasons = df_all_seasons.applymap(
+            lambda x: str(x).replace(',', '').replace('"', '') if isinstance(x, str) else x
+        )
+        
+        # Sauvegarder sans guillemets
+        df_all_seasons.to_csv(csv_file, index=False, encoding='utf-8-sig', quoting=csv.QUOTE_MINIMAL)
+        print(f"\n💾 Données sauvegardées (sans guillemets et sans virgules internes) : {csv_file}")
+        
         
         return df_all_seasons, metadata, available_seasons
         

@@ -166,66 +166,70 @@ class PlayerComparator:
         return valid_stats[:6]  # Max 6 stats
     
     def plot_comparison_spider(self, save_path: str = None):
-        """Spider comparaison 16:9"""
+        """Spider comparaison inspirée de plot_spider_radar (16:9)"""
         categories = list(PlayerAnalyzer.CATEGORIES.keys())
-        
+
         values1 = [self.analyzer1._get_category_average_normalized(cat) for cat in categories]
         values2 = [self.analyzer2._get_category_average_normalized(cat) for cat in categories]
-        
         angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
         values1 += values1[:1]
         values2 += values2[:1]
         angles += angles[:1]
-        
+
         fig = plt.figure(figsize=(16, 9), facecolor='none')
         self._create_gradient_background(fig)
-        
         ax = fig.add_subplot(111, projection='polar', facecolor='none')
-        
-        # Joueur 1 - Rouge
-        ax.plot(angles, values1, 'o-', linewidth=4, 
-                color=self.COLORS['player1'], markersize=12, 
-                markeredgecolor=self.COLORS['edge'], markeredgewidth=2, 
+
+        # Joueur 1
+        ax.plot(angles, values1, 'o-', linewidth=4,
+                color=self.COLORS['player1'], markersize=12,
+                markeredgecolor=self.COLORS['edge'], markeredgewidth=2,
                 label=self.player1_name, zorder=5, alpha=0.9)
         ax.fill(angles, values1, alpha=0.2, color=self.COLORS['player1'], zorder=4)
-        
-        # Joueur 2 - Bleu
-        ax.plot(angles, values2, 's-', linewidth=4, 
-                color=self.COLORS['player2'], markersize=12, 
-                markeredgecolor=self.COLORS['edge'], markeredgewidth=2, 
+
+        # Joueur 2
+        ax.plot(angles, values2, 's-', linewidth=4,
+                color=self.COLORS['player2'], markersize=12,
+                markeredgecolor=self.COLORS['edge'], markeredgewidth=2,
                 label=self.player2_name, zorder=5, alpha=0.9)
         ax.fill(angles, values2, alpha=0.2, color=self.COLORS['player2'], zorder=4)
-        
+
         ax.set_ylim(0, 100)
         ax.set_yticks([25, 50, 75, 100])
-        ax.set_yticklabels(['25', '50', '75', '100'], size=14, 
-                          color='white', fontweight='bold')
-        
+        ax.set_yticklabels(['25', '50', '75', '100'],
+                           color='white', size=14, fontweight='bold')
         ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(categories, size=16, fontweight='bold', color='white')
-        
-        ax.grid(color='white', linestyle='-', linewidth=2, alpha=0.5)
+        ax.set_xticklabels([])  # Pas de texte pour éviter chevauchement
+
+        ax.grid(True, color='white', linestyle='--', linewidth=2, alpha=0.4)
         ax.spines['polar'].set_color('white')
         ax.spines['polar'].set_linewidth(2.5)
-        
-        # Légende
-        legend = ax.legend(loc='upper right', fontsize=14, 
-                          facecolor='black', edgecolor='white',
-                          framealpha=0.8, labelcolor='white')
-        legend.get_frame().set_linewidth(2)
-        
-        plt.title(f'COMPARAISON\n{self.player1_name} vs {self.player2_name}', 
-                 size=28, fontweight='bold', pad=50, color='white')
-        
+
+        # Affichage des catégories comme plot_spider_radar
+        for i, angle in enumerate(angles[:-1]):
+            ax.text(angle, 115, categories[i], size=18, color="#FFFFFF", fontweight='bold',
+                    ha='center', va='center',
+                    bbox=dict(boxstyle='round,pad=0.4', fc='black', ec='#FFD700', lw=2.5, alpha=0.9))
+
+        # Titre comparaison + competitions
+        plt.title(f'COMPARAISON | {self.competition1} vs {self.competition2}',
+                  size=32, fontweight='bold', pad=50, color='white')
+
+        # Légende décalée plus à droite
+        legend = ax.legend(loc='upper left', bbox_to_anchor=(1.15, 1.0),
+                           frameon=True, facecolor='black', edgecolor='#FFD700',
+                           fontsize=14, labelcolor='white', framealpha=0.9)
+        legend.get_frame().set_linewidth(2.5)
+
         self._add_watermark(fig)
         self._add_comparison_context(fig)
-        
         plt.tight_layout()
-        
+
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
-                       facecolor=self.COLORS['gradient_end'])
+            plt.savefig(save_path, dpi=300, bbox_inches='tight',
+                        facecolor=self.COLORS['gradient_end'])
         plt.close()
+
     
     def plot_comparison_scatter(self, save_path: str = None):
         """Scatter 16:9"""
