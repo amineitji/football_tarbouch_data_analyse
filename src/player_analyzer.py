@@ -4,6 +4,8 @@ PlayerAnalyzer V24 - Évaluation Très Exigeante via Benchmark Hybride
 - Un benchmark "Élite" (Standard * 1.30) correspond à 100.
 - Normalisation non linéaire (Power=2.0) sous le Standard, linéaire au-dessus.
 - Conserve la pondération (V16), pénalité d'inconsistance (V23), seuils très stricts (V22).
+
+MODIF V24.12 : Suppression de bbox_inches='tight' dans savefig pour un fond complet
 """
 
 import pandas as pd
@@ -11,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap
+from mplsoccer import VerticalPitch # Added for new cards plot
 from typing import Dict, List, Optional, Tuple
 import warnings
 import re
@@ -22,7 +25,7 @@ plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'Helvetica']
 
 
 class PlayerAnalyzer:
-    """Analyseur tactique V24: Benchmark Hybride + Power 2.0 + CapIndiv + Pondéré + StdDev Penalty + Seuils Très Stricts"""
+    """Analyseur tactique V24.12: Fond Gradient Complet + "Stat Pitch" """
 
     # Standards = 90e percentile (INCHANGÉ)
     POSITION_STANDARDS = {
@@ -57,9 +60,13 @@ class PlayerAnalyzer:
          'Possession': ['Touches', 'Carries', 'Progressive Carries', 'Successful Take-Ons', 'Carries into Final Third']
     }
 
+    # --- MODIFICATION V24.11 : Couleurs pour le gradient ---
     COLORS = {
-        'gradient_start': "#000000", 'gradient_end': "#646327", 'points': '#FF0000',
-        'text': '#FFFFFF', 'edge': '#000000'
+        'gradient_start': "#000000",
+        'gradient_end': "#646327", # Retour au doré sombre / olive
+        'points': '#FF0000',
+        'text': '#FFFFFF',
+        'edge': '#000000'
     }
 
     # === Paramètres de Normalisation Hybride ===
@@ -105,12 +112,22 @@ class PlayerAnalyzer:
         self.minutes = minutes_val
         print(f"📊 Données chargées. Stats: {len(self.stats)}. Minutes: {self.minutes}")
 
+    # =========================================================================
+    # =================== FONCTION MODIFIÉE (V24.11) ==========================
+    # =========================================================================
     def _create_gradient_background(self, fig):
-        # ... (Identique V21) ...
+        # --- MODIFICATION V24.11 : Retour au gradient ---
+        # Remet la logique du gradient qui était présente avant V24.9
         gradient = np.linspace(0, 1, 256).reshape(-1, 1); gradient = np.hstack((gradient, gradient))
         cmap = LinearSegmentedColormap.from_list("", [self.COLORS['gradient_start'], self.COLORS['gradient_end']])
-        ax_bg = fig.add_axes([0, 0, 1, 1]); ax_bg.axis('off')
-        ax_bg.imshow(gradient, aspect='auto', cmap=cmap, extent=[0, 1, 0, 1], zorder=-1)
+        ax_bg = fig.add_axes([0, 0, 1, 1], zorder=-1) # Ajout zorder=-1
+        ax_bg.axis('off')
+        ax_bg.imshow(gradient, aspect='auto', cmap=cmap, extent=[0, 1, 0, 1])
+        # Ne pas set fig.patch.set_facecolor ici, on utilise l'axe ax_bg
+    # =========================================================================
+    # ===================== FIN DE LA FONCTION MODIFIÉE =======================
+    # =========================================================================
+
 
     def _customize_axes(self, ax):
         # ... (Identique V21) ...
@@ -128,7 +145,9 @@ class PlayerAnalyzer:
         if self.competition: context_parts.append(str(self.competition))
         if self.minutes is not None: context_parts.append(f"{self.minutes:.0f} min")
         context_text = " | ".join(context_parts) + f" | Eval Hybride Pwr{self.NORMALIZATION_POWER}+Pen{self.CONSISTENCY_PENALTY_FACTOR}+Wgt" # Mention évaluation
-        fig.text(0.02, 0.02, context_text, fontsize=9, color='white', fontweight='normal', ha='left', va='bottom', alpha=0.9)
+        # --- MODIFICATION V24.6 ---
+        # Remonter le contexte pour qu'il ne soit pas caché par la marge
+        fig.text(0.02, 0.04, context_text, fontsize=9, color='white', fontweight='normal', ha='left', va='bottom', alpha=0.9)
 
     def _clean_stat_name(self, stat_name: str) -> str:
         # ... (Identique V21) ...
@@ -169,19 +188,13 @@ class PlayerAnalyzer:
             normalized = scaled_ratio * self.STANDARD_SCORE_TARGET
         else: # value > standard_benchmark
             # Partie linéaire mappée sur STANDARD_SCORE_TARGET - 100
-            # Calculer la proportion de la distance entre Standard et Elite couverte
-            # Assurer que elite_benchmark > standard_benchmark pour éviter division par zéro
             range_diff = elite_benchmark - standard_benchmark
             if range_diff <= 0: # Si Elite <= Standard, plafonner à STANDARD_SCORE_TARGET
                 normalized = self.STANDARD_SCORE_TARGET
             else:
                 proportion_above_standard = (value - standard_benchmark) / range_diff
-                # Limiter cette proportion à 1 (on ne dépasse pas 100)
                 capped_proportion = min(1.0, proportion_above_standard)
-                # Ajouter la proportion de la plage restante (100 - STANDARD_SCORE_TARGET)
                 normalized = self.STANDARD_SCORE_TARGET + (100.0 - self.STANDARD_SCORE_TARGET) * capped_proportion
-
-        # Assurer que le résultat final est bien entre 0 et 100
         return max(0.0, min(normalized, 100.0))
     # =========================================
 
@@ -191,7 +204,6 @@ class PlayerAnalyzer:
         result = {}
         for i, stat_name in enumerate(stats_in_category):
             raw_value = self._get_stat_value(stat_name)
-            # Applique la normalisation hybride
             normalized_value = self._normalize_stat(raw_value, standards[i]) if i < len(standards) else 0.0
             stat_weight = weights.get(stat_name, 1.0)
             result[stat_name] = (raw_value, normalized_value, stat_weight) # norm_val <= 100
@@ -211,69 +223,164 @@ class PlayerAnalyzer:
         penalty_reduction = self.CONSISTENCY_PENALTY_FACTOR * (std_dev / 100.0)
         final_score = weighted_average * (1.0 - penalty_reduction)
         final_score = max(0.0, min(final_score, 100.0))
-        # print(f"   => Cat: {category} | MoyPond: {weighted_average:.1f} | StdDev: {std_dev:.1f} | Penalty: {penalty_reduction:.2f} | ScoreFinal: {final_score:.0f}")
         return final_score
 
-    # --- Méthodes de Plotting (inchangées en structure) ---
-    # Elles utiliseront les nouveaux scores finaux (hybrides + pénalité).
+    # --- Méthodes de Plotting ---
 
+    # =========================================================================
+    # =================== FONCTION plot_spider_radar (V24.12) =================
+    # =========================================================================
     def plot_spider_radar(self, save_path: Optional[str] = None):
-        # ... (Identique V21, utilisera les nouveaux scores finaux) ...
         if self.df is None or not self.stats: print("⚠️ Spider Radar: Données non chargées."); return
         categories=list(self.CATEGORIES.keys()); values_normalized=[self._get_category_average_normalized(cat) for cat in categories]
         if all(v == 0 for v in values_normalized): print("⚠️ Spider Radar: Scores finaux à 0.")
         angles=np.linspace(0, 2*np.pi, len(categories), endpoint=False).tolist(); values_normalized+=values_normalized[:1]; angles+=angles[:1]
-        fig=plt.figure(figsize=(16, 9), facecolor='none'); self._create_gradient_background(fig); ax=fig.add_subplot(111, projection='polar', facecolor='none')
-        ax.plot(angles, values_normalized, 'o-', linewidth=4, color=self.COLORS['points'], markersize=14, markeredgecolor=self.COLORS['edge'], markeredgewidth=2.5, label=f"{self.player_name}", zorder=5, alpha=0.9)
-        ax.fill(angles, values_normalized, alpha=0.25, color=self.COLORS['points'], zorder=4)
-        ax.set_ylim(0, 100); ax.set_xticks(angles[:-1]); ax.set_xticklabels([])
-        ax.set_yticks([20, 40, 60, 80, 100]); ax.set_yticklabels(['20', '40', '60', '80', '100'], color='white', size=14, fontweight='bold')
-        ax.grid(True, color='white', linestyle='--', linewidth=2, alpha=0.4); ax.spines['polar'].set_color('white'); ax.spines['polar'].set_linewidth(3)
-        for i, angle in enumerate(angles[:-1]): ax.text(angle, 115, categories[i], size=18, color="#FFFFFF", fontweight='bold', ha='center', va='center', bbox=dict(boxstyle='round,pad=0.4', fc='black', ec='#FFFFFF', lw=2.5, alpha=0.9))
-        title = f'{self.player_name}' + (f' | {self.competition}' if self.competition else '') + f''; plt.title(title, size=24, fontweight='bold', pad=50, color='white')
-        legend = ax.legend(loc='upper left', bbox_to_anchor=(1.15, 1.0), frameon=True, facecolor='black', edgecolor='#FFFFFF', fontsize=14, labelcolor='white', framealpha=0.9); legend.get_frame().set_linewidth(2.5)
-        self._add_watermark(fig); self._add_context_info(fig); plt.tight_layout(rect=[0, 0.05, 1, 0.95])
-        if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor=self.COLORS['gradient_end'], edgecolor='black')
-        plt.close(fig)
+        
+        fig = plt.figure(figsize=(16, 9), facecolor='none') 
+        self._create_gradient_background(fig) # Dessine le gradient sur ax_bg
+        
+        gs = fig.add_gridspec(1, 2, width_ratios=[2, 1], wspace=0.1) 
+        ax_spider = fig.add_subplot(gs[0, 0], projection='polar', facecolor='none')
+        ax_stats = fig.add_subplot(gs[0, 1], facecolor='none')
+        
+        # --- PANNEAU 1 : Le Graphique Spider ---
+        ax_spider.plot(angles, values_normalized, 'o-', linewidth=4, color=self.COLORS['points'], markersize=14, markeredgecolor=self.COLORS['edge'], markeredgewidth=2.5, label=f"{self.player_name}", zorder=5, alpha=0.9)
+        ax_spider.fill(angles, values_normalized, alpha=0.25, color=self.COLORS['points'], zorder=4)
+        ax_spider.set_ylim(0, 100); ax_spider.set_xticks(angles[:-1]); ax_spider.set_xticklabels([])
+        ax_spider.set_yticks([20, 40, 60, 80, 100]); ax_spider.set_yticklabels(['20', '40', '60', '80', '100'], color='white', size=14, fontweight='bold')
+        ax_spider.grid(True, color='white', linestyle='--', linewidth=2, alpha=0.4); ax_spider.spines['polar'].set_color('white'); ax_spider.spines['polar'].set_linewidth(3)
+        for i, angle in enumerate(angles[:-1]): ax_spider.text(angle, 115, categories[i], size=18, color="#FFFFFF", fontweight='bold', ha='center', va='center', bbox=dict(boxstyle='round,pad=0.4', fc='black', ec='#FFFFFF', lw=2.5, alpha=0.9))
+        
+        title = f'{self.player_name}' + (f' | {self.competition}' if self.competition else '') + f''
+        fig.suptitle(title, size=28, fontweight='bold', color='white', y=0.97)
 
-    def plot_key_stats_cards(self, save_path: Optional[str] = None):
-        # ... (Identique V21) ...
-        if self.df is None or not self.stats: print("⚠️ Stats Cards: Données non chargées."); return
-        if self.position=='DF': key_stats=[('Tackles Won','TACLES GAGNÉS'),('Interceptions','INTERCEPTIONS'),('Blocks','CONTRES'),('Ball Recoveries','RÉCUPÉRATIONS'),('Progressive Passes','PASSES PROG.'),('Passes Completed','PASSES RÉUSSIES')]
-        elif self.position=='FW': key_stats=[('Goals','BUTS'),('npxG: Non-Penalty xG','NPXG'),('Shots Total','TIRS'),('Assists','PASSES DÉC.'),('Shot-Creating Actions','ACTIONS CRÉÉES'),('Successful Take-Ons','DRIBBLES RÉUSSIS')]
-        elif self.position=='GK': key_stats=[('Save pct','ARRÊTS %'),('Clean Sheet pct','CLEAN SHEETS %'),('PSxG_net','PSxG +/-'),('Launched_Cmp_pct','PASSES LONGUES %'),('Crosses_Stopped_pct','CENTRES STOPPÉS%'),('Def_Actions_Outside_Pen_Area','SORTIES')]
-        else: key_stats=[('Goals','BUTS'),('Assists','PASSES DÉC.'),('Progressive Passes','PASSES PROG.'),('Tackles Won','TACLES GAGNÉS'),('xG: Expected Goals','xG'),('Key Passes','PASSES CLÉS')]
-        fig=plt.figure(figsize=(16, 9), facecolor='none'); self._create_gradient_background(fig)
-        num_stats=len(key_stats); rows=2 if num_stats > 3 else 1; cols=(num_stats + rows - 1) // rows
-        valid_stats_found=0
-        for i, (stat_key, stat_label) in enumerate(key_stats):
-            ax=plt.subplot(rows, cols, i + 1, facecolor='none'); value=self._get_stat_value(stat_key)
-            value_text = f'{value:.1f}%' if '%' in stat_key or 'pct' in stat_key.lower() or 'Percentage' in stat_key else f'{value:.2f}'
-            if value > 0: valid_stats_found += 1
-            ax.text(0.5, 0.6, value_text, ha='center', va='center', fontsize=40, fontweight='bold', color='white')
-            ax.text(0.5, 0.3, stat_label.upper(), ha='center', va='center', fontsize=16, fontweight='bold', color='white', wrap=True)
-            if '%' not in stat_key and 'pct' not in stat_key.lower() and 'Percentage' not in stat_key: ax.text(0.5, 0.15, 'par 90 min', ha='center', va='center', fontsize=11, style='italic', color='white', alpha=0.8)
-            ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis('off')
-            rect=mpatches.Rectangle((0.05, 0.05), 0.9, 0.9, linewidth=2.5, edgecolor='white', facecolor='black', alpha=0.3, transform=ax.transAxes, zorder=-1); ax.add_patch(rect)
-        if valid_stats_found == 0: print(f"⚠️ Stats Cards: Aucune stat clé trouvée.")
-        fig.suptitle(f'{self.player_name}\nSTATISTIQUES CLÉS BRUTES ({self.position})', fontsize=28, fontweight='bold', color='white', y=0.98)
-        self._add_watermark(fig); self._add_context_info(fig); plt.tight_layout(rect=[0, 0.05, 1, 0.93])
-        if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor=self.COLORS['gradient_end'], edgecolor='black')
+        # --- PANNEAU 2 : La Fiche de Stats (Boîtes empilées) ---
+        ax_stats.axis('off')
+        ax_stats.set_xlim(0, 1); ax_stats.set_ylim(0, 1)
+
+        handles, labels = ax_spider.get_legend_handles_labels()
+        legend = ax_stats.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.965), frameon=False, fontsize=16, labelcolor='white')
+        for text in legend.get_texts(): text.set_fontweight('bold')
+
+        categories_list = list(self.CATEGORIES.keys())
+        num_categories = len(categories_list)
+        y_start_top_of_stack = 0.88; y_bottom_of_stack = 0.08
+        total_drawable_height = y_start_top_of_stack - y_bottom_of_stack
+        box_height_total = total_drawable_height / num_categories
+        v_padding = 0.015; box_height_drawable = box_height_total - v_padding
+        title_font_size = 13; stat_font_size = 10
+        
+        for i, category in enumerate(categories_list):
+            y_top = y_start_top_of_stack - (i * box_height_total)
+            y_bottom = y_top - box_height_drawable
+            rect = mpatches.Rectangle((0.05, y_bottom), 0.9, box_height_drawable, transform=ax_stats.transAxes, linewidth=2.5, edgecolor='white', facecolor='black', alpha=0.4, zorder=1)
+            ax_stats.add_patch(rect)
+            title_y = y_top - 0.015 
+            ax_stats.text(0.1, title_y, category.upper(), weight='bold', color='white', size=title_font_size, va='top', transform=ax_stats.transAxes, zorder=2)
+            stats_list = self.CATEGORIES[category]
+            title_space = 0.035; bottom_padding = 0.015
+            available_stat_height = box_height_drawable - title_space - bottom_padding
+            stat_line_height = max(0.01, available_stat_height / 5) 
+            stat_y_start = title_y - title_space
+            for j, stat in enumerate(stats_list):
+                stat_y = stat_y_start - (j * stat_line_height)
+                if stat_y < (y_bottom + bottom_padding): break 
+                clean_stat = stat.replace(': Expected', '').replace(': Non-Penalty', '')
+                ax_stats.text(0.15, stat_y, f"• {clean_stat}", color='white', size=stat_font_size, va='top', weight='bold', transform=ax_stats.transAxes, zorder=2)
+        
+        self._add_watermark(fig); self._add_context_info(fig)
+        plt.tight_layout(rect=[0, 0.08, 1, 0.92]) 
+        
+        if save_path: 
+             # --- MODIFICATION V24.12 : Suppression bbox_inches ---
+             plt.savefig(
+                 save_path, 
+                 dpi=300, 
+                 # bbox_inches='tight', # Supprimé
+                 facecolor='none', 
+                 edgecolor='none', 
+                 transparent=True 
+             )
         plt.close(fig)
+    # =========================================================================
+    # ===================== FIN DE LA FONCTION MODIFIÉE =======================
+    # =========================================================================
+
+    # =========================================================================
+    # =================== FONCTION MODIFIÉE (V24.10) ==========================
+    # =========================================================================
+    def plot_key_stats_cards(self, save_path: Optional[str] = None):
+        """ Nouvelle visualisation : "Stat Pitch" """
+        if self.df is None or not self.stats: print("⚠️ Stats Pitch: Données non chargées."); return
+
+        fig = plt.figure(figsize=(16, 9), facecolor='none') 
+        self._create_gradient_background(fig) # Dessine le gradient
+        ax = fig.add_subplot(111)
+        ax.axis('off') 
+
+        pitch = VerticalPitch( pitch_type='opta', half=True, pitch_color='none', line_color='#a9a9a9', linewidth=1.5, line_alpha=0.5, goal_type='box', goal_alpha=0.6 )
+        pitch.draw(ax=ax)
+
+        stats_to_plot = {}
+        if self.position == 'FW':
+            key_stats = [ ('Goals', 'BUTS'), ('npxG: Non-Penalty xG', 'NPXG'), ('Shots Total', 'TIRS'), ('Assists', 'PASSES D.'), ('Successful Take-Ons', 'DRIBBLES RÉ.'), ('Touches_Att_Pen', 'TOUCHES SURFACE') ]
+            positions = [(50, 95), (50, 88), (75, 85), (75, 75), (25, 75), (25, 85)] 
+        elif self.position == 'MF':
+             key_stats = [ ('Progressive Passes', 'PASSES PROG.'), ('Key Passes', 'PASSES CLÉS'), ('Assists', 'PASSES D.'), ('Successful Take-Ons', 'DRIBBLES RÉ.'), ('Interceptions', 'INTERCEPTIONS'), ('Tackles Won', 'TACLES GAGNÉS') ]
+             positions = [(30, 60), (70, 75), (70, 85), (70, 60), (30, 75), (30, 85)]
+        elif self.position == 'DF':
+             key_stats = [ ('Tackles Won', 'TACLES GAGNÉS'), ('Interceptions', 'INTERCEPTIONS'), ('Blocks', 'CONTRES'), ('Clearances', 'DÉGAGEMENTS'), ('Progressive Passes', 'PASSES PROG.'), ('Aerials Won pct', 'DUELS AÉRIENS %') ]
+             positions = [(30, 65), (70, 65), (50, 75), (50, 85), (75, 55), (25, 55)]
+        else: # GK
+             key_stats = [ ('Save pct', 'ARRÊTS %'), ('PSxG_net', 'PSxG +/-'), ('Crosses_Stopped_pct', 'CENTRES STOP %'), ('Launched_Cmp_pct', 'PASSES LONGUES %'), ('Def_Actions_Outside_Pen_Area', 'SORTIES') ]
+             positions = [(50, 97), (50, 90), (25, 90), (75, 90), (50, 83)]
+
+        valid_stats_count = 0
+        for i, (stat_key, stat_label) in enumerate(key_stats):
+            if i >= len(positions): break 
+            value = self._get_stat_value(stat_key)
+            if value == 0 and '%' not in stat_label: continue 
+            value_text = f'{value:.1f}%' if '%' in stat_key or 'pct' in stat_key.lower() or 'Percentage' in stat_key or '%' in stat_label else f'{value:.2f}'
+            display_text = f"{stat_label.upper()}\n{value_text}"
+            x_pitch, y_pitch = positions[i]
+            ax.text(
+                x_pitch, y_pitch, display_text, ha='center', va='center', fontsize=14, 
+                fontweight='bold', color='white',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='black', edgecolor=self.COLORS['points'], linewidth=2, alpha=0.8)
+            )
+            valid_stats_count += 1
+            if valid_stats_count >= 6: break 
+
+        if valid_stats_count == 0:
+            ax.text(50, 75, "Aucune stat clé\ndisponible", ha='center', va='center', fontsize=18, color='red', fontweight='bold')
+
+        fig.suptitle(f'{self.player_name} ({self.position})\nSTATISTIQUES CLÉS BRUTES (par 90 min)', fontsize=28, fontweight='bold', color='white', y=0.97)
+
+        self._add_watermark(fig); self._add_context_info(fig)
+        plt.tight_layout(rect=[0, 0.05, 1, 0.90]) 
+
+        if save_path: 
+            # --- MODIFICATION V24.12 : Suppression bbox_inches ---
+            plt.savefig(save_path, dpi=300, facecolor='none', edgecolor='none', transparent=True)
+        plt.close(fig)
+    # =========================================================================
+    # ===================== FIN DE LA FONCTION MODIFIÉE =======================
+    # =========================================================================
+
 
     def plot_percentile_bars(self, save_path: Optional[str] = None):
-        # ... (Identique V21, utilisera les nouveaux scores finaux) ...
         if self.df is None or not self.stats: print("⚠️ Barres Percentile: Données non chargées."); return
         categories=list(self.CATEGORIES.keys()); scores=[self._get_category_average_normalized(cat) for cat in categories]
         valid_categories=[]; valid_scores=[]
         for cat, score in zip(categories, scores):
             if score > 0 or self.position == 'GK': valid_categories.append(cat); valid_scores.append(score)
         if not valid_scores: print("⚠️ Barres Percentile: Scores finaux à 0."); return
-        fig=plt.figure(figsize=(16, 9), facecolor='none'); self._create_gradient_background(fig); ax=fig.add_subplot(111, facecolor='none')
+        fig=plt.figure(figsize=(16, 9), facecolor='none'); 
+        self._create_gradient_background(fig); ax=fig.add_subplot(111, facecolor='none')
         y_pos=np.arange(len(valid_categories)); bars=ax.barh(y_pos, valid_scores, height=0.6, color=self.COLORS['points'], edgecolor=self.COLORS['edge'], linewidth=2, alpha=0.8)
         for i, (bar, score) in enumerate(zip(bars, valid_scores)): ax.text(score + 3, i, f'{score:.0f}', va='center', ha='left', fontsize=16, fontweight='bold', color='white')
         ax.set_yticks(y_pos); ax.set_yticklabels(valid_categories, fontsize=14, color='white', fontweight='bold'); ax.invert_yaxis()
-        ax.set_xlim(0, 110); ax.set_xlabel(f'SCORE FINAL (Hybride+Pen{self.CONSISTENCY_PENALTY_FACTOR}+Wgt, vs 90e pct={self.STANDARD_SCORE_TARGET})', fontsize=11, color='white', fontweight='bold') # Label ajusté
+        ax.set_xlim(0, 110); ax.set_xlabel(f'SCORE FINAL (Hybride+Pen{self.CONSISTENCY_PENALTY_FACTOR}+Wgt, vs 90e pct={self.STANDARD_SCORE_TARGET})', fontsize=11, color='white', fontweight='bold') 
         ax.tick_params(axis='x', colors='white', labelsize=14); ax.tick_params(axis='y', length=0)
         self._customize_axes(ax); ax.spines['left'].set_visible(False); ax.spines['right'].set_visible(False); ax.spines['top'].set_visible(False)
         elite_thresh=self.thresholds['elite']; good_thresh=self.thresholds['good']; acceptable_thresh=self.thresholds['acceptable']
@@ -285,19 +392,19 @@ class PlayerAnalyzer:
         ax.text(elite_thresh, -0.8, f'Élite ({elite_thresh})', ha='center', va='bottom', fontsize=12, color='white', fontweight='bold', alpha=0.8)
         ax.set_title(f'{self.player_name} ({self.position})', fontsize=24, fontweight='bold', color='white', pad=20)
         self._add_watermark(fig); self._add_context_info(fig); plt.tight_layout(rect=[0, 0.05, 1, 0.95])
-        if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor=self.COLORS['gradient_end'], edgecolor='black')
+        if save_path: 
+             # --- MODIFICATION V24.12 : Suppression bbox_inches ---
+             plt.savefig(save_path, dpi=300, facecolor='none', edgecolor='none', transparent=True)
         plt.close(fig)
 
     def plot_performance_grid(self, save_path: Optional[str] = None):
-        # Affiche les scores normalisés INDIVIDUELS (hybrides maintenant)
         if self.df is None or not self.stats: print("⚠️ Grille Performance: Données non chargées."); return
         matrix_data=[]; row_labels=[]; col_labels=[]
         max_cols=0
         for category in self.CATEGORIES.keys():
-             stats_data=self._get_category_stats_normalized(category) # Récupère (raw, norm_hybride, weight)
+             stats_data=self._get_category_stats_normalized(category) 
              if stats_data:
-                normalized_vals=[v[1] for v in stats_data.values()]; stat_names=list(stats_data.keys()) # Prend norm_hybride (index 1)
-                # Pas besoin de re-plafonner ici, déjà fait dans _normalize_stat
+                normalized_vals=[v[1] for v in stats_data.values()]; stat_names=list(stats_data.keys()) 
                 row_vals = normalized_vals[:5] + [np.nan]*(5 - len(normalized_vals))
                 row_stat_names=stat_names[:5] + [""]*(5 - len(stat_names))
                 matrix_data.append(row_vals); row_labels.append(category)
@@ -305,7 +412,8 @@ class PlayerAnalyzer:
                 max_cols=max(max_cols, len(normalized_vals))
         if not matrix_data: print("⚠️ Grille Performance: Aucune donnée à afficher."); return
         num_cols_to_display=min(max_cols, 5); matrix_data=np.array(matrix_data)[:, :num_cols_to_display]; col_labels=col_labels[:num_cols_to_display]
-        fig=plt.figure(figsize=(16, 9), facecolor='none'); self._create_gradient_background(fig); ax=fig.add_subplot(111, facecolor='none')
+        fig=plt.figure(figsize=(16, 9), facecolor='none'); 
+        self._create_gradient_background(fig); ax=fig.add_subplot(111, facecolor='none')
         cmap=LinearSegmentedColormap.from_list('custom', ['#333333', self.COLORS['points']], N=256); cmap.set_bad(color='#1a1a1a')
         im=ax.imshow(matrix_data, cmap=cmap, aspect='auto', vmin=0, vmax=100, interpolation='nearest')
         ax.set_yticks(np.arange(len(row_labels))); ax.set_yticklabels(row_labels, fontsize=14, fontweight='bold', color='white')
@@ -315,33 +423,34 @@ class PlayerAnalyzer:
                 val=matrix_data[i, j]
                 if not pd.isna(val): color='white' if val < 40 or val > 90 else 'black'; ax.text(j, i, f'{val:.0f}', ha='center', va='center', fontsize=14, fontweight='bold', color=color)
         cbar=plt.colorbar(im, ax=ax, pad=0.02, fraction=0.046, aspect=30)
-        cbar.set_label(f'Score Stat Hybride (90pct={self.STANDARD_SCORE_TARGET})', fontsize=12, color='white', fontweight='bold'); cbar.ax.tick_params(colors='white', labelsize=12) # Label ajusté
+        cbar.set_label(f'Score Stat Hybride (90pct={self.STANDARD_SCORE_TARGET})', fontsize=12, color='white', fontweight='bold'); cbar.ax.tick_params(colors='white', labelsize=12)
         cbar.outline.set_edgecolor('white'); cbar.outline.set_linewidth(1)
         plt.title(f'{self.player_name}\nMATRICE DE PERFORMANCE DÉTAILLÉE ({self.position})', fontsize=25, fontweight='bold', color='white', pad=20)
         for spine in ax.spines.values(): spine.set_visible(False)
         self._add_watermark(fig); self._add_context_info(fig); plt.tight_layout(rect=[0, 0.05, 1, 0.95])
-        if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor=self.COLORS['gradient_end'], edgecolor='black')
+        if save_path: 
+             # --- MODIFICATION V24.12 : Suppression bbox_inches ---
+             plt.savefig(save_path, dpi=300, facecolor='none', edgecolor='none', transparent=True)
         plt.close(fig)
 
     def print_tactical_summary(self):
-        # Utilise les nouveaux scores finaux (avec pénalité) et les seuils TRES STRICTS
+        # ... (Inchangé) ...
         if self.df is None or not self.stats: print("⚠️ Résumé Tactique: Données non chargées."); return
         print(f"\n{'='*80}")
         print(f"  ⚽ {self.player_name} ({self.position}) - Saison: {self.season or 'N/A'} | Comp: {self.competition or 'N/A'} ⚽")
         print(f"  ⏱️  Minutes jouées: {self.minutes:.0f}" if self.minutes is not None else "  ⏱️  Minutes non disponibles")
-        print(f"  📊 Éval. Hybride Très Exigeante (90e pct={self.STANDARD_SCORE_TARGET}, Pwr{self.NORMALIZATION_POWER}+Pen{self.CONSISTENCY_PENALTY_FACTOR}+Wgt)") # Mention évaluation
+        print(f"  📊 Éval. Hybride Très Exigeante (90e pct={self.STANDARD_SCORE_TARGET}, Pwr{self.NORMALIZATION_POWER}+Pen{self.CONSISTENCY_PENALTY_FACTOR}+Wgt)") 
         print(f"{'='*80}\n")
 
         elite_thresh=self.thresholds['elite']; good_thresh=self.thresholds['good']; acceptable_thresh=self.thresholds['acceptable']
 
         has_scores=False
         for category in self.CATEGORIES.keys():
-            score=self._get_category_average_normalized(category) # Score Hybride+Pondéré+Penalty
+            score=self._get_category_average_normalized(category) 
             if score == 0 and self.position != 'GK': continue
             has_scores=True
             bar_length=int(score / 2); bar='█'*bar_length + '░'*(50 - bar_length)
 
-            # Labels basés sur les seuils TRES STRICTS
             if score >= elite_thresh: emoji='🟢'; label=f'ÉLITE ({score:.0f} ≥ {elite_thresh})'
             elif score >= good_thresh: emoji='🟡'; label=f'BON ({good_thresh} ≤ {score:.0f} < {elite_thresh})'
             elif score >= acceptable_thresh: emoji='🟠'; label=f'MOYEN ({acceptable_thresh} ≤ {score:.0f} < {good_thresh})'
@@ -350,7 +459,6 @@ class PlayerAnalyzer:
             print(f"  {emoji} {category:<12} {bar} {score:>5.0f}/100  [{label}]")
 
         if not has_scores: print("  ⚠️ Aucune catégorie n'a pu être évaluée.")
-        # Labels des seuils mis à jour dans le print
         print(f"\n  Seuils (Score Très Exigeant): Élite ≥ {elite_thresh} | Bon ≥ {good_thresh} | Moyen ≥ {acceptable_thresh} | À Améliorer < {acceptable_thresh}")
         print(f"\n{'='*80}")
         print(f"  @TarbouchData")

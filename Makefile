@@ -17,9 +17,11 @@ TACTICAL_DIR = ./tactical_analysis
 COMPARISON_DIR = ./comparison_analysis
 # Python cache directory name
 CACHE_DIR = __pycache__
+# Visualization file extensions (add others if needed, e.g., .svg, .pdf)
+VIZ_EXT = png jpg jpeg
 
 # Phony targets don't represent files
-.PHONY: all install run clean help lint
+.PHONY: all install run clean clean-viz clean-all help lint
 
 # --- Targets ---
 
@@ -27,7 +29,6 @@ CACHE_DIR = __pycache__
 all: help
 
 # Install dependencies from requirements.txt
-# NOTE: You need to create a requirements.txt file!
 install: $(REQS)
 	@echo "--- Installing dependencies from $(REQS)... ---"
 	$(PIP) install -r $(REQS)
@@ -39,21 +40,35 @@ run:
 	$(PYTHON) $(MAIN_SCRIPT)
 	@echo "--- Analysis finished. ---"
 
-# Clean up generated files and directories
-clean:
-	@echo "--- Cleaning up generated files... ---"
-	-rm -rf $(OUTPUT_DIR)
+# Clean visualization and cache files ONLY (keeps CSVs) - THIS IS THE DEFAULT CLEAN
+clean: clean-viz
+
+# Clean visualization outputs and Python cache
+clean-viz:
+	@echo "--- Cleaning up visualizations and cache files (keeping CSVs)... ---"
+	# Remove visualization files from tactical and comparison dirs
+	-find $(TACTICAL_DIR) $(COMPARISON_DIR) -maxdepth 1 \( $(foreach ext,$(VIZ_EXT), -name '*.$(ext)' -o) -false \) -delete
+	# Remove Python cache directories and files from source dir
+	-find $(SRC_DIR) -type d -name '$(CACHE_DIR)' -exec rm -rf {} +
+	-find $(SRC_DIR) -type f -name '*.pyc' -delete
+	-find $(SRC_DIR) -type f -name '*~' -delete # Remove backup files
+	@echo "--- Visualization and cache cleanup complete. ---"
+
+# Clean EVERYTHING including generated CSV files
+clean-all:
+	@echo "--- Cleaning up ALL generated files (including CSVs)... ---"
+	-rm -rf $(OUTPUT_DIR) # Removes the entire CSV output directory
 	-rm -rf $(TACTICAL_DIR)
 	-rm -rf $(COMPARISON_DIR)
 	-find $(SRC_DIR) -type d -name '$(CACHE_DIR)' -exec rm -rf {} +
 	-find $(SRC_DIR) -type f -name '*.pyc' -delete
 	-find $(SRC_DIR) -type f -name '*~' -delete
-	@echo "--- Cleanup complete. ---"
+	@echo "--- Full cleanup complete. ---"
 
 # Lint the code using flake8 (optional, requires flake8 installed)
 lint:
 	@echo "--- Linting Python code with flake8... ---"
-	$(PIP) show flake8 > /dev/null || (echo "flake8 not found, please run 'make install-dev' or 'pip install flake8'" && exit 1)
+	@$(PIP) show flake8 > /dev/null || (echo "flake8 not found, please run 'make install-dev' or 'pip install flake8'" && exit 1)
 	flake8 $(SRC_DIR)/*.py
 	@echo "--- Linting complete. ---"
 
@@ -62,18 +77,20 @@ help:
 	@echo "Makefile for FBref Universal Analyzer"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make install    Install required Python packages from $(REQS)"
-	@echo "  make run        Run the main analysis script ($(MAIN_SCRIPT))"
-	@echo "  make clean      Remove generated output files and cache"
-	@echo "  make lint       Check Python code style using flake8 (requires flake8)"
-	@echo "  make help       Show this help message"
+	@echo "  make install     Install required Python packages from $(REQS)"
+	@echo "  make run         Run the main analysis script ($(MAIN_SCRIPT))"
+	@echo "  make clean       Remove generated visualizations and Python cache (keeps CSVs)"
+	@echo "  make clean-viz   Alias for 'make clean'"
+	@echo "  make clean-all   Remove ALL generated files, including CSVs and output directories"
+	@echo "  make lint        Check Python code style using flake8 (requires flake8)"
+	@echo "  make help        Show this help message"
 	@echo ""
 	@echo "Note: Ensure you have a '$(REQS)' file with necessary packages:"
-	@echo "      pandas, numpy, matplotlib, selenium, beautifulsoup4, lxml, flake8 (optional)"
+	@echo "      pandas, numpy, matplotlib, selenium, beautifulsoup4, lxml, mplsoccer, flake8 (optional)"
 
 # --- Requirements File Check ---
 # Check if requirements.txt exists for the install target
 $(REQS):
-	@echo "Error: '$(REQS)' not found."
-	@echo "Please create it with your project dependencies (e.g., pandas, numpy, matplotlib, selenium, beautifulsoup4, lxml)."
-	@exit 1
+	@test -f $(REQS) || (echo "Error: '$(REQS)' not found." && \
+	echo "Please create it with your project dependencies (e.g., pandas, numpy, matplotlib, selenium, beautifulsoup4, lxml, mplsoccer)." && \
+	exit 1)
